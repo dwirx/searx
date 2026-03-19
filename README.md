@@ -32,12 +32,23 @@ After install:
 search --version
 ```
 
-Update to latest release:
+Update from CLI (recommended after install):
+```bash
+search update
+```
+
+Update to latest release (installer script form):
 ```bash
 curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --update
 ```
 
-Uninstall:
+Uninstall from CLI:
+```bash
+search uninstall
+search uninstall --keep-lightpanda
+```
+
+Uninstall (installer script form):
 ```bash
 curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --uninstall
 ```
@@ -83,6 +94,14 @@ search -read "https://www.nytimes.com/2026/03/17/world/middleeast/iran-war-israe
 ```
 
 ## 📖 Usage Guide
+
+Update / uninstall shortcuts:
+```bash
+search update                  # update CLI + check Lightpanda
+search update --lightpanda-only
+search uninstall
+search uninstall --keep-lightpanda
+```
 
 ### 1. Search
 Search using the default engine (DuckDuckGo):

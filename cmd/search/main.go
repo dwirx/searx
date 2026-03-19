@@ -1,9 +1,12 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"searx-cli/internal/engine"
 	"searx-cli/internal/reader"
 	"searx-cli/internal/ui"
@@ -12,6 +15,12 @@ import (
 )
 
 var version = "dev"
+var installScriptURL = "https://github.com/dwirx/searx/releases/latest/download/install.sh"
+
+type subcommandOptions struct {
+	LightpandaOnly bool
+	KeepLightpanda bool
+}
 
 func getDefaultEngine() string {
 	return "ddg"
@@ -64,6 +73,71 @@ func buildEngine(name, searxInstance, hnCategory string) (engine.SearchEngine, b
 	}
 }
 
+func installerActionArgs(action string, keepLightpanda bool) ([]string, error) {
+	switch action {
+	case "update":
+		return []string{"--update"}, nil
+	case "uninstall":
+		args := []string{"--uninstall"}
+		if keepLightpanda {
+			args = append(args, "--keep-lightpanda")
+		}
+		return args, nil
+	default:
+		return nil, errors.New("unsupported installer action")
+	}
+}
+
+func installerShellCommand(action string, keepLightpanda bool) (string, error) {
+	args, err := installerActionArgs(action, keepLightpanda)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("curl -sSL %s | bash -s -- %s", installScriptURL, strings.Join(args, " ")), nil
+}
+
+func runInstallerAction(action string, keepLightpanda bool) error {
+	cmdStr, err := installerShellCommand(action, keepLightpanda)
+	if err != nil {
+		return err
+	}
+
+	cmd := exec.Command("bash", "-lc", cmdStr)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Env = append(os.Environ(), "SEARX_SKIP_SETUP=1")
+	return cmd.Run()
+}
+
+func parseSubcommandOptions(command string, args []string) (subcommandOptions, error) {
+	opts := subcommandOptions{}
+	fs := flag.NewFlagSet(command, flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+
+	switch command {
+	case "update":
+		lightpandaOnly := fs.Bool("lightpanda-only", false, "With update command: only check/update Lightpanda")
+		if err := fs.Parse(args); err != nil {
+			return opts, err
+		}
+		opts.LightpandaOnly = *lightpandaOnly
+	case "uninstall":
+		keepLightpanda := fs.Bool("keep-lightpanda", false, "With uninstall command: keep Lightpanda files")
+		if err := fs.Parse(args); err != nil {
+			return opts, err
+		}
+		opts.KeepLightpanda = *keepLightpanda
+	default:
+		return opts, nil
+	}
+
+	if fs.NArg() > 0 {
+		return opts, fmt.Errorf("unexpected arguments for %s: %s", command, strings.Join(fs.Args(), " "))
+	}
+
+	return opts, nil
+}
+
 var defaultSearxInstances = []string{
 	"https://searx.be",
 	"https://paulgo.io",
@@ -76,7 +150,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Usage: search [options] [query]\n\n")
 		fmt.Fprintf(os.Stderr, "Commands:\n")
 		fmt.Fprintf(os.Stderr, "  setup         Download and install the latest Lightpanda browser\n")
-		fmt.Fprintf(os.Stderr, "  update        Force update the Lightpanda browser\n")
+		fmt.Fprintf(os.Stderr, "  update        Update Search CLI and check Lightpanda update status\n")
+		fmt.Fprintf(os.Stderr, "  uninstall     Uninstall Search CLI from current system\n")
 		fmt.Fprintf(os.Stderr, "  version       Show Search CLI and Lightpanda versions\n")
 		fmt.Fprintf(os.Stderr, "  --version     Show Search CLI version only\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
@@ -85,11 +160,15 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  -save         Save the read article to a markdown file\n")
 		fmt.Fprintf(os.Stderr, "  -panda        Force use of Lightpanda for reading\n")
 		fmt.Fprintf(os.Stderr, "  -archive      Use archive.today prefix for paywalls\n")
-		fmt.Fprintf(os.Stderr, "  -hn <cat>     Hacker News category: top, new, best, ask, show, job\n\n")
+		fmt.Fprintf(os.Stderr, "  -hn <cat>     Hacker News category: top, new, best, ask, show, job\n")
+		fmt.Fprintf(os.Stderr, "  -lightpanda-only  With `update`, only check/update Lightpanda\n")
+		fmt.Fprintf(os.Stderr, "  -keep-lightpanda  With `uninstall`, keep Lightpanda files\n\n")
 		fmt.Fprintf(os.Stderr, "Examples:\n")
 		fmt.Fprintf(os.Stderr, "  search \"golang news\"\n")
 		fmt.Fprintf(os.Stderr, "  search -e hn -hn best\n")
 		fmt.Fprintf(os.Stderr, "  search -read \"https://...\" -save\n")
+		fmt.Fprintf(os.Stderr, "  search update\n")
+		fmt.Fprintf(os.Stderr, "  search uninstall --keep-lightpanda\n")
 	}
 
 	engineFlag := flag.String("e", getDefaultEngine(), "Engine: ddg, google, brave, mojeek, hn, searx")
@@ -117,7 +196,43 @@ func main() {
 			}
 			return
 		case "update":
+			opts, err := parseSubcommandOptions("update", flag.Args()[1:])
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+
+			if opts.LightpandaOnly {
+				fmt.Println("Checking Lightpanda update status...")
+				if err := util.UpdateLightpanda(); err != nil {
+					fmt.Printf("Error: %v\n", err)
+					os.Exit(1)
+				}
+				fmt.Println("[✔] Lightpanda update check complete.")
+				return
+			}
+
+			fmt.Println("Checking Search CLI latest release (skip if already up to date)...")
+			if err := runInstallerAction("update", false); err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Println("Checking Lightpanda update status...")
 			if err := util.UpdateLightpanda(); err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Println("[✔] Update check complete.")
+			return
+		case "uninstall", "unistall":
+			opts, err := parseSubcommandOptions("uninstall", flag.Args()[1:])
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+
+			fmt.Println("Uninstalling Search CLI...")
+			if err := runInstallerAction("uninstall", opts.KeepLightpanda); err != nil {
 				fmt.Printf("Error: %v\n", err)
 				os.Exit(1)
 			}

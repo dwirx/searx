@@ -74,7 +74,43 @@ search -read "https://example.com/article" -archive -save
 
 ```bash
 search setup   # install/check/update to latest if needed
-search update  # force update check now
+```
+
+## Update and Uninstall
+
+Update app + Lightpanda:
+
+```bash
+search update
+```
+
+Update Lightpanda only:
+
+```bash
+search update --lightpanda-only
+```
+
+Uninstall app + Lightpanda:
+
+```bash
+search uninstall
+```
+
+Uninstall app only (keep Lightpanda):
+
+```bash
+search uninstall --keep-lightpanda
+```
+
+Notes:
+- `search update` skips binary download when installed CLI is already the latest release.
+- Lightpanda update also skips download when already on the latest detected version.
+
+Equivalent installer script commands:
+
+```bash
+curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --update
+curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --uninstall
 ```
 
 ## Output Files
@@ -82,17 +118,3 @@ search update  # force update check now
 When `-save` is used, output is written to the current directory as:
 
 `<sanitized-title>.md`
-
-## App Update / Uninstall
-
-Update app binary:
-
-```bash
-curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --update
-```
-
-Uninstall app:
-
-```bash
-curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --uninstall
-```

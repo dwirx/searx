@@ -28,20 +28,39 @@ The installer will:
 Update `search` to latest release:
 
 ```bash
+search update
+```
+
+Script form:
+
+```bash
 curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --update
 ```
 
-By default, update keeps the current install location when `search` is already found in `PATH`.
+`search update` and installer update both skip binary download if the installed version is already the latest release.
+Lightpanda update check also skips download when already up to date.
 
 ## Uninstall
 
 Remove `search` and Lightpanda:
 
 ```bash
+search uninstall
+```
+
+Script form:
+
+```bash
 curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --uninstall
 ```
 
 Remove `search` only (keep Lightpanda):
+
+```bash
+search uninstall --keep-lightpanda
+```
+
+Script form:
 
 ```bash
 curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --uninstall --keep-lightpanda
