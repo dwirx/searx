@@ -80,3 +80,17 @@ search update  # force update check now
 When `-save` is used, output is written to the current directory as:
 
 `<sanitized-title>.md`
+
+## App Update / Uninstall
+
+Update app binary:
+
+```bash
+curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --update
+```
+
+Uninstall app:
+
+```bash
+curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --uninstall
+```

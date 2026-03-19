@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -18,6 +19,8 @@ const (
 	latestReleaseURL = "https://api.github.com/repos/lightpanda-io/browser/releases/latest"
 	downloadURLTmpl  = "https://github.com/lightpanda-io/browser/releases/download/%s/lightpanda-%s-linux"
 )
+
+var semverPattern = regexp.MustCompile(`v?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)`)
 
 type githubRelease struct {
 	TagName string `json:"tag_name"`
@@ -57,6 +60,70 @@ func LightpandaBinaryPath() (string, error) {
 	return "", fmt.Errorf("lightpanda not installed; run `search setup`")
 }
 
+func normalizeLightpandaVersion(raw string) (string, bool) {
+	match := semverPattern.FindStringSubmatch(strings.TrimSpace(raw))
+	if len(match) < 2 {
+		return "", false
+	}
+
+	return match[1], true
+}
+
+func sameLightpandaVersion(a, b string) bool {
+	a = strings.TrimSpace(a)
+	b = strings.TrimSpace(b)
+	if a == "" || b == "" {
+		return false
+	}
+	if strings.EqualFold(a, b) {
+		return true
+	}
+
+	na, oka := normalizeLightpandaVersion(a)
+	nb, okb := normalizeLightpandaVersion(b)
+	return oka && okb && na == nb
+}
+
+func isLightpandaUpToDate(localVersion, latestTag, recordedTag string) bool {
+	if sameLightpandaVersion(recordedTag, latestTag) {
+		return true
+	}
+	return sameLightpandaVersion(localVersion, latestTag)
+}
+
+func shouldAutoUpdateLightpanda(localVersion, latestTag, recordedTag string) bool {
+	if localVersion == "Not installed" {
+		return true
+	}
+	if strings.Contains(localVersion, "Error") {
+		return true
+	}
+	if isLightpandaUpToDate(localVersion, latestTag, recordedTag) {
+		return false
+	}
+	if _, ok := normalizeLightpandaVersion(localVersion); !ok {
+		// Unknown local version (often a commit hash). Don't auto-update on normal reads.
+		return false
+	}
+	return true
+}
+
+func lightpandaTagPath(binaryPath string) string {
+	return binaryPath + ".tag"
+}
+
+func readRecordedLightpandaTag(binaryPath string) string {
+	tagBytes, err := os.ReadFile(lightpandaTagPath(binaryPath))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(tagBytes))
+}
+
+func writeRecordedLightpandaTag(binaryPath, tag string) error {
+	return os.WriteFile(lightpandaTagPath(binaryPath), []byte(strings.TrimSpace(tag)+"\n"), 0644)
+}
+
 func GetLocalLightpandaVersion() string {
 	binaryPath, ok := resolveLightpandaBinaryPath()
 	if !ok {
@@ -64,12 +131,21 @@ func GetLocalLightpandaVersion() string {
 	}
 
 	cmd := exec.Command(binaryPath, "version")
-	var out bytes.Buffer
+	var out, errOut bytes.Buffer
 	cmd.Stdout = &out
+	cmd.Stderr = &errOut
 	if err := cmd.Run(); err != nil {
 		return "Unknown (Error running binary)"
 	}
-	return strings.TrimSpace(out.String())
+
+	version := strings.TrimSpace(out.String())
+	if version == "" {
+		version = strings.TrimSpace(errOut.String())
+	}
+	if version == "" {
+		return "Unknown (No version output)"
+	}
+	return version
 }
 
 func GetLatestLightpandaVersion() (string, error) {
@@ -98,6 +174,7 @@ func EnsureLightpanda() error {
 	}
 
 	local := GetLocalLightpandaVersion()
+	recordedTag := readRecordedLightpandaTag(configuredLightpandaPath())
 
 	latest, err := GetLatestLightpandaVersion()
 	if err != nil {
@@ -109,8 +186,12 @@ func EnsureLightpanda() error {
 		latest = "nightly"
 	}
 
-	if latest != "nightly" && local != "Not installed" && !strings.Contains(local, "Error") && strings.Contains(local, latest) {
-		fmt.Printf("Lightpanda is already up to date (%s).\n", latest)
+	if !shouldAutoUpdateLightpanda(local, latest, recordedTag) {
+		if isLightpandaUpToDate(local, latest, recordedTag) {
+			fmt.Printf("Lightpanda is already up to date (%s).\n", latest)
+		} else if local != "Not installed" {
+			fmt.Printf("Lightpanda detected (%s) but version cannot be verified. Skipping auto-update. Run `search update` to force update.\n", local)
+		}
 		return nil
 	}
 
@@ -132,7 +213,9 @@ func UpdateLightpanda() error {
 	}
 
 	local := GetLocalLightpandaVersion()
-	if strings.Contains(local, latest) && local != "Not installed" {
+	recordedTag := readRecordedLightpandaTag(configuredLightpandaPath())
+
+	if local != "Not installed" && isLightpandaUpToDate(local, latest, recordedTag) {
 		fmt.Printf("Lightpanda is already up to date (%s).\n", latest)
 		return nil
 	}
@@ -209,6 +292,9 @@ func downloadLightpanda(version string) error {
 
 	fmt.Println("\n[✔] Download complete!")
 	if err := os.Chmod(binaryPath, 0755); err != nil {
+		return err
+	}
+	if err := writeRecordedLightpandaTag(binaryPath, version); err != nil {
 		return err
 	}
 

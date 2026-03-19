@@ -32,6 +32,26 @@ After install:
 search --version
 ```
 
+Update to latest release:
+```bash
+curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --update
+```
+
+Uninstall:
+```bash
+curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --uninstall
+```
+
+Custom install dir (optional):
+```bash
+SEARX_INSTALL_DIR="$HOME/bin" curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash
+```
+
+Skip setup / disable auto PATH update (optional):
+```bash
+SEARX_SKIP_SETUP=1 SEARX_AUTO_PATH=0 curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash
+```
+
 ### Manual Install
 **Linux (x86_64 example):**
 ```bash

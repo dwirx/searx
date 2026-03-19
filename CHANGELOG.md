@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+- Added installer actions: `--update` and `--uninstall`.
+- Added uninstall option `--keep-lightpanda` to keep Lightpanda files.
+- Added automatic PATH profile update for user-directory installs (can be disabled with `SEARX_AUTO_PATH=0`).
+- Updated docs with explicit update/uninstall commands.
+
 ## v1.2.3 - 2026-03-20
 
 - Improved release installer (`install.sh`) with OS/arch detection, safer install paths, and version-aware binary install.
