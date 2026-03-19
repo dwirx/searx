@@ -18,7 +18,7 @@ A powerful, modular, and distraction-free CLI search tool written in Go. Search 
 ### 1. One-liner (Recommended)
 Install the latest version automatically:
 ```bash
-curl -sSL https://raw.githubusercontent.com/dwirx/searx-cli/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/dwirx/searx/main/install.sh | bash
 ```
 
 ### 2. Manual Build

@@ -2,8 +2,8 @@
 set -e
 
 # Configuration
-REPO="dwirx/searx-cli" # Change this to your actual username/repo
-BINARY_NAME="searx"
+REPO="dwirx/searx"
+BINARY_NAME="search"
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
