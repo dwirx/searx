@@ -1,5 +1,5 @@
 # Binaries
-search
+/search
 lightpanda
 *.exe
 *.exe~
@@ -30,4 +30,3 @@ Thumbs.db
 # Environment and secrets
 .env
 .env.*
-
