@@ -1,0 +1,33 @@
+# Binaries
+search
+lightpanda
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, coverage, and profiling
+*.test
+*.out
+coverage.out
+cpu.prof
+mem.prof
+
+# Go workspace and vendor artifacts
+vendor/
+
+# IDE/editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment and secrets
+.env
+.env.*
+
