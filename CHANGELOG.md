@@ -7,6 +7,8 @@ All notable changes to this project are documented in this file.
 - Added installer actions: `--update` and `--uninstall`.
 - Added uninstall option `--keep-lightpanda` to keep Lightpanda files.
 - Added automatic PATH profile update for user-directory installs (can be disabled with `SEARX_AUTO_PATH=0`).
+- Changed default search engine to `ddg` so `search "<query>"` works more reliably out of the box.
+- Added automatic engine fallback for blocked responses (`202/403/429`) on `ddg` and `searx`.
 - Updated docs with explicit update/uninstall commands.
 
 ## v1.2.3 - 2026-03-20

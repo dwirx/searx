@@ -13,6 +13,57 @@ import (
 
 var version = "dev"
 
+func getDefaultEngine() string {
+	return "ddg"
+}
+
+func shouldFallback(primary string, err error) bool {
+	if err == nil {
+		return false
+	}
+
+	switch strings.ToLower(primary) {
+	case "ddg", "searx":
+	default:
+		return false
+	}
+
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "status code 202") ||
+		strings.Contains(msg, "status code 403") ||
+		strings.Contains(msg, "status code 429")
+}
+
+func fallbackEngineNames(primary string) []string {
+	switch strings.ToLower(primary) {
+	case "ddg":
+		return []string{"mojeek", "google", "brave"}
+	case "searx":
+		return []string{"ddg", "mojeek", "google"}
+	default:
+		return nil
+	}
+}
+
+func buildEngine(name, searxInstance, hnCategory string) (engine.SearchEngine, bool) {
+	switch strings.ToLower(name) {
+	case "google":
+		return &engine.GoogleEngine{}, true
+	case "ddg":
+		return &engine.DuckDuckGoEngine{}, true
+	case "brave":
+		return &engine.BraveEngine{}, true
+	case "mojeek":
+		return &engine.MojeekEngine{}, true
+	case "hn":
+		return &engine.HackerNewsEngine{Category: hnCategory}, true
+	case "searx":
+		return &engine.SearxEngine{InstanceURL: searxInstance}, true
+	default:
+		return nil, false
+	}
+}
+
 var defaultSearxInstances = []string{
 	"https://searx.be",
 	"https://paulgo.io",
@@ -41,7 +92,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  search -read \"https://...\" -save\n")
 	}
 
-	engineFlag := flag.String("e", "searx", "Engine: ddg, google, brave, mojeek, hn, searx")
+	engineFlag := flag.String("e", getDefaultEngine(), "Engine: ddg, google, brave, mojeek, hn, searx")
 	instanceFlag := flag.String("i", "", "Searx instance URL (only for -e searx)")
 	hnCatFlag := flag.String("hn", "top", "HN category: top, new, best, ask, show, job")
 	readURL := flag.String("read", "", "URL to read article content from")
@@ -168,6 +219,22 @@ func main() {
 
 	results, err := searchEngine.Search(query)
 	if err != nil {
+		primary := strings.ToLower(*engineFlag)
+		if shouldFallback(primary, err) {
+			for _, fallbackName := range fallbackEngineNames(primary) {
+				fallbackEngine, ok := buildEngine(fallbackName, "", *hnCatFlag)
+				if !ok {
+					continue
+				}
+				fmt.Printf("Primary engine %s failed (%v). Trying fallback: %s...\n", primary, err, fallbackName)
+				fallbackResults, fallbackErr := fallbackEngine.Search(query)
+				if fallbackErr == nil {
+					ui.PrintResults(fallbackEngine.Name(), query, fallbackResults)
+					return
+				}
+			}
+		}
+
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}

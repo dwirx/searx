@@ -17,6 +17,8 @@ Default engine:
 search "golang generics"
 ```
 
+Default engine is `ddg`. If blocked (`202/403/429`), CLI automatically tries fallback engines.
+
 Select engine:
 
 ```bash
