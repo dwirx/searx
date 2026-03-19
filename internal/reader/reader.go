@@ -20,15 +20,13 @@ func SmartRead(urlStr string) (*Article, error) {
 	fmt.Printf("Attempting standard fetch: %s...\n", urlStr)
 	article, err := ReadURL(urlStr)
 	
-	// If it's a 403 or 429, or the content is suspicious (e.g. "Access Denied"), try Lightpanda
 	if err != nil && (strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "429")) {
 		fmt.Printf("Standard fetch blocked (%v). Retrying with Lightpanda browser...\n", err)
 		return ReadURLWithLightpanda(urlStr)
 	}
 
-	// If it succeeded but returned very little content (common for paywalls/bot protection)
-	if err == nil && len(article.Content) < 200 {
-		fmt.Printf("Low content detected. Retrying with Lightpanda to handle JavaScript/Protection...\n")
+	if err == nil && len(article.Content) < 300 {
+		fmt.Printf("Low content detected (%d chars). Retrying with Lightpanda...\n", len(article.Content))
 		return ReadURLWithLightpanda(urlStr)
 	}
 
@@ -36,23 +34,15 @@ func SmartRead(urlStr string) (*Article, error) {
 }
 
 func ReadURL(urlStr string) (*Article, error) {
-	// Support archive.is and variants
-	isArchive := strings.Contains(urlStr, "archive.is") || 
-				 strings.Contains(urlStr, "archive.today") || 
-				 strings.Contains(urlStr, "archive.ph") ||
-				 strings.Contains(urlStr, "archive.li") ||
-				 strings.Contains(urlStr, "archive.vn") ||
-				 strings.Contains(urlStr, "archive.fo") ||
-				 strings.Contains(urlStr, "archive.md")
+	isArchive := strings.Contains(urlStr, "archive")
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	req, _ := http.NewRequest("GET", urlStr, nil)
 	
-	// Better headers and Referer bypass
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("Referer", "https://www.google.com/") // Try to look like a search result click
+	req.Header.Set("Referer", "https://www.google.com/") 
 	
 	resp, err := client.Do(req)
 	if err != nil {
@@ -73,42 +63,122 @@ func ReadURL(urlStr string) (*Article, error) {
 }
 
 func extractContent(doc *goquery.Document, isArchive bool) (*Article, error) {
-	title := strings.TrimSpace(doc.Find("title").First().Text())
+	// 1. Pre-cleanup: Remove elements that are almost always junk
+	junkSelectors := []string{
+		"script", "style", "iframe", "noscript", "footer", "nav", "header", 
+		".header", ".footer", ".nav", ".sidebar", ".ad", ".ads", "#wm-ipp-base", 
+		".mw-editsection", ".newsletter-signup", ".social-share", ".related-posts",
+		".duet--article--newsletter-form", ".duet--content-cards", ".duet--article--author-bio",
+		".duet--article--related-list", ".duet--article--social-share", "aside",
+		".duet--article--article-footer", ".duet--article--related-item",
+		".duet--article--top-rule", ".duet--article--article-header",
+		".duet--article--article-meta", ".duet--article--ad-unit",
+		".related-content", ".recommendations", ".trending-now", ".comments-area",
+		".tags-list", ".post-tags", ".article-tags",
+	}
+	for _, sel := range junkSelectors {
+		doc.Find(sel).Remove()
+	}
+
+	// 2. Get Title
+	title := strings.TrimSpace(doc.Find("h1").First().Text())
 	if title == "" {
-		title = doc.Find("h1").First().Text()
+		title = strings.TrimSpace(doc.Find("title").First().Text())
 	}
 	
-	var contentBuilder strings.Builder
+	var lines []string
+	seenParagraphs := make(map[string]bool)
 
-	if isArchive {
-		// Archive.is often wraps the content in a specific way
-		doc.Find("#wm-ipp-base, #wm-ipp-print, #header, .header").Remove() 
-		
-		doc.Find("article, .article, .story, #article, div[role='main'], #ins_storybody, .story-content").Find("p").Each(func(i int, s *goquery.Selection) {
-			text := strings.TrimSpace(s.Text())
-			if len(text) > 30 {
-				contentBuilder.WriteString(text + "\n\n")
-			}
-		})
-	} else {
-		// Standard news site logic
-		doc.Find("section[name='articleBody'], .StoryBodyCompanionColumn, .article-body, article, main, .post-content").Find("p").Each(func(i int, s *goquery.Selection) {
-			text := strings.TrimSpace(s.Text())
-			if len(text) > 30 {
-				contentBuilder.WriteString(text + "\n\n")
-			}
-		})
+	// 3. Find Article Body
+	var body *goquery.Selection
+	selectors := []string{
+		"article", "main", ".duet--article--article-body", ".article-body", 
+		".story-body", ".post-content", "section[name='articleBody']", 
+		".entry-content", ".content-body", "#article-content", ".article__body",
 	}
 
-	content := contentBuilder.String()
-	if content == "" {
-		doc.Find("p").Each(func(i int, s *goquery.Selection) {
-			text := strings.TrimSpace(s.Text())
-			if len(text) > 60 && !strings.Contains(text, "©") && !strings.Contains(text, "Terms of") {
-				contentBuilder.WriteString(text + "\n\n")
+	for _, sel := range selectors {
+		if found := doc.Find(sel); found.Length() > 0 {
+			body = found
+			break
+		}
+	}
+
+	if body == nil {
+		body = doc.Find("body")
+	}
+
+	// 4. Extract Structured Content
+	body.Find("p, h2, h3, h4, li, blockquote").Each(func(i int, s *goquery.Selection) {
+		// Aggressive container check
+		if s.Closest(".newsletter, .ad, .social, .related, aside, footer, nav, .duet--article--newsletter-form, .duet--content-cards, #most-popular").Length() > 0 {
+			return
+		}
+
+		text := strings.TrimSpace(s.Text())
+		if text == "" {
+			return
+		}
+
+		// FILTER JUNK PHRASES
+		junkPhrases := []string{
+			"daily email digest", "homepage feed", "FollowFollow", 
+			"Posts from this topic", "Posts from this author", 
+			"A free daily digest", "Terms of Service", "Privacy Policy",
+			"See All by", "Senior Reviewer", "Senior Reporter",
+			"link copied", "copy link", "share on facebook", "share on twitter",
+			"Read more:", "Sign up for", "Log in", "Subscribe",
+		}
+		for _, phrase := range junkPhrases {
+			if strings.Contains(strings.ToLower(text), strings.ToLower(phrase)) {
+				return
 			}
-		})
-		content = contentBuilder.String()
+		}
+
+		// UI Keywork Filtering (Very short lines)
+		if len(text) < 20 {
+			uiKeywords := []string{"Link", "Share", "Gift", "Report", "Gaming", "Policy", "Antitrust", "Comment", "Print", "Email"}
+			for _, kw := range uiKeywords {
+				if text == kw {
+					return
+				}
+			}
+		}
+
+		// Deduplication (don't add the same paragraph twice)
+		if seenParagraphs[text] {
+			return
+		}
+		seenParagraphs[text] = true
+
+		tagName := goquery.NodeName(s)
+		switch tagName {
+		case "h2":
+			if text == "Most Popular" || text == "The Verge Daily" || text == "Comments" || text == "Related" {
+				return
+			}
+			lines = append(lines, "## "+text+"\n")
+		case "h3":
+			lines = append(lines, "### "+text+"\n")
+		case "h4":
+			lines = append(lines, "#### "+text+"\n")
+		case "blockquote":
+			lines = append(lines, "> "+text+"\n")
+		case "li":
+			lines = append(lines, "- "+text)
+		default: // paragraph
+			if len(text) > 30 {
+				lines = append(lines, text+"\n")
+			}
+		}
+	})
+
+	content := strings.Join(lines, "\n")
+	content = strings.TrimSpace(content)
+	
+	// Final whitespace cleanup
+	for strings.Contains(content, "\n\n\n") {
+		content = strings.ReplaceAll(content, "\n\n\n", "\n\n")
 	}
 
 	return &Article{
@@ -118,7 +188,6 @@ func extractContent(doc *goquery.Document, isArchive bool) (*Article, error) {
 }
 
 func ReadURLWithLightpanda(urlStr string) (*Article, error) {
-	// Use lightpanda fetch with stealth flags
 	cmd := exec.Command("./lightpanda", "fetch", "--dump", "html", "--strip_mode", "js,css", urlStr)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
