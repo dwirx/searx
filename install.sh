@@ -3,7 +3,7 @@ set -e
 
 # Configuration
 REPO="dwirx/searx-cli" # Change this to your actual username/repo
-BINARY_NAME="search"
+BINARY_NAME="searx"
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -49,4 +49,4 @@ else
     ./$BINARY_NAME setup
 fi
 
-echo "[✔] Installation complete! Try running: $BINARY_NAME \"golang\""
+echo "[✔] Installation complete! Try running: $BINARY_NAME \"golang generics\""
