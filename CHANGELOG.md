@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 
 - No unreleased changes.
 
+## v1.2.7 - 2026-03-20
+
+- Fixed Lightpanda auto-setup logic to avoid repeated downloads when local binary exists but version check fails.
+- Kept manual update behavior intact: users can still force refresh using `search update` or `search update --lightpanda-only`.
+- Added regression test coverage for the "error running binary" version-check scenario.
+
 ## v1.2.6 - 2026-03-20
 
 - Added CLI-managed lifecycle commands:

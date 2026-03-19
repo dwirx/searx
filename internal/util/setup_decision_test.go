@@ -70,6 +70,13 @@ func TestShouldAutoUpdateLightpanda(t *testing.T) {
 			recordedTag: "",
 			want:        true,
 		},
+		{
+			name:        "error local version should skip auto update",
+			local:       "Unknown (Error running binary)",
+			latest:      "nightly",
+			recordedTag: "",
+			want:        false,
+		},
 	}
 
 	for _, tc := range cases {

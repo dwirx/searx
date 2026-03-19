@@ -96,7 +96,10 @@ func shouldAutoUpdateLightpanda(localVersion, latestTag, recordedTag string) boo
 		return true
 	}
 	if strings.Contains(localVersion, "Error") {
-		return true
+		// If the local binary exists but version check fails, avoid repeated
+		// auto-download loops during normal `search setup` / install flows.
+		// Users can still force refresh via `search update`.
+		return false
 	}
 	if isLightpandaUpToDate(localVersion, latestTag, recordedTag) {
 		return false
