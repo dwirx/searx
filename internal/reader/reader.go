@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os/exec"
+	"searx-cli/internal/util"
 	"strings"
 	"time"
 
@@ -19,7 +20,7 @@ type Article struct {
 func SmartRead(urlStr string) (*Article, error) {
 	fmt.Printf("Attempting standard fetch: %s...\n", urlStr)
 	article, err := ReadURL(urlStr)
-	
+
 	if err != nil && (strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "429")) {
 		fmt.Printf("Standard fetch blocked (%v). Retrying with Lightpanda browser...\n", err)
 		return ReadURLWithLightpanda(urlStr)
@@ -38,12 +39,12 @@ func ReadURL(urlStr string) (*Article, error) {
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	req, _ := http.NewRequest("GET", urlStr, nil)
-	
+
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("Referer", "https://www.google.com/") 
-	
+	req.Header.Set("Referer", "https://www.google.com/")
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -65,8 +66,8 @@ func ReadURL(urlStr string) (*Article, error) {
 func extractContent(doc *goquery.Document, isArchive bool) (*Article, error) {
 	// 1. Pre-cleanup: Remove elements that are almost always junk
 	junkSelectors := []string{
-		"script", "style", "iframe", "noscript", "footer", "nav", "header", 
-		".header", ".footer", ".nav", ".sidebar", ".ad", ".ads", "#wm-ipp-base", 
+		"script", "style", "iframe", "noscript", "footer", "nav", "header",
+		".header", ".footer", ".nav", ".sidebar", ".ad", ".ads", "#wm-ipp-base",
 		".mw-editsection", ".newsletter-signup", ".social-share", ".related-posts",
 		".duet--article--newsletter-form", ".duet--content-cards", ".duet--article--author-bio",
 		".duet--article--related-list", ".duet--article--social-share", "aside",
@@ -85,15 +86,15 @@ func extractContent(doc *goquery.Document, isArchive bool) (*Article, error) {
 	if title == "" {
 		title = strings.TrimSpace(doc.Find("title").First().Text())
 	}
-	
+
 	var lines []string
 	seenParagraphs := make(map[string]bool)
 
 	// 3. Find Article Body
 	var body *goquery.Selection
 	selectors := []string{
-		"article", "main", ".duet--article--article-body", ".article-body", 
-		".story-body", ".post-content", "section[name='articleBody']", 
+		"article", "main", ".duet--article--article-body", ".article-body",
+		".story-body", ".post-content", "section[name='articleBody']",
 		".entry-content", ".content-body", "#article-content", ".article__body",
 	}
 
@@ -122,8 +123,8 @@ func extractContent(doc *goquery.Document, isArchive bool) (*Article, error) {
 
 		// FILTER JUNK PHRASES
 		junkPhrases := []string{
-			"daily email digest", "homepage feed", "FollowFollow", 
-			"Posts from this topic", "Posts from this author", 
+			"daily email digest", "homepage feed", "FollowFollow",
+			"Posts from this topic", "Posts from this author",
 			"A free daily digest", "Terms of Service", "Privacy Policy",
 			"See All by", "Senior Reviewer", "Senior Reporter",
 			"link copied", "copy link", "share on facebook", "share on twitter",
@@ -175,7 +176,7 @@ func extractContent(doc *goquery.Document, isArchive bool) (*Article, error) {
 
 	content := strings.Join(lines, "\n")
 	content = strings.TrimSpace(content)
-	
+
 	// Final whitespace cleanup
 	for strings.Contains(content, "\n\n\n") {
 		content = strings.ReplaceAll(content, "\n\n\n", "\n\n")
@@ -188,12 +189,17 @@ func extractContent(doc *goquery.Document, isArchive bool) (*Article, error) {
 }
 
 func ReadURLWithLightpanda(urlStr string) (*Article, error) {
-	cmd := exec.Command("./lightpanda", "fetch", "--dump", "html", "--strip_mode", "js,css", urlStr)
+	lightpandaPath, err := util.LightpandaBinaryPath()
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := exec.Command(lightpandaPath, "fetch", "--dump", "html", "--strip_mode", "js,css", urlStr)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		return nil, fmt.Errorf("lightpanda error: %v, stderr: %s", err, stderr.String())
 	}

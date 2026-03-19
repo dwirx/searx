@@ -8,25 +8,61 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 )
 
 const (
-	binaryPath      = "./lightpanda"
 	latestReleaseURL = "https://api.github.com/repos/lightpanda-io/browser/releases/latest"
-	downloadURLTmpl = "https://github.com/lightpanda-io/browser/releases/download/%s/lightpanda-%s-linux"
+	downloadURLTmpl  = "https://github.com/lightpanda-io/browser/releases/download/%s/lightpanda-%s-linux"
 )
 
 type githubRelease struct {
 	TagName string `json:"tag_name"`
 }
 
+func configuredLightpandaPath() string {
+	if custom := strings.TrimSpace(os.Getenv("SEARX_LIGHTPANDA_PATH")); custom != "" {
+		return custom
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return "./lightpanda"
+	}
+
+	return filepath.Join(home, ".local", "share", "searx", "lightpanda")
+}
+
+func resolveLightpandaBinaryPath() (string, bool) {
+	configured := configuredLightpandaPath()
+	if info, err := os.Stat(configured); err == nil && !info.IsDir() {
+		return configured, true
+	}
+
+	if fromPath, err := exec.LookPath("lightpanda"); err == nil {
+		return fromPath, true
+	}
+
+	return configured, false
+}
+
+func LightpandaBinaryPath() (string, error) {
+	if path, ok := resolveLightpandaBinaryPath(); ok {
+		return path, nil
+	}
+
+	return "", fmt.Errorf("lightpanda not installed; run `search setup`")
+}
+
 func GetLocalLightpandaVersion() string {
-	if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
+	binaryPath, ok := resolveLightpandaBinaryPath()
+	if !ok {
 		return "Not installed"
 	}
+
 	cmd := exec.Command(binaryPath, "version")
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -56,23 +92,40 @@ func GetLatestLightpandaVersion() (string, error) {
 }
 
 func EnsureLightpanda() error {
-	local := GetLocalLightpandaVersion()
-	if local != "Not installed" && !strings.Contains(local, "Error") {
-		// If already installed, we only update if specifically asked via 'update' command
-		// or if we want to be aggressive. Let's be polite and just ensure it exists.
+	if runtime.GOOS != "linux" {
+		fmt.Printf("Lightpanda auto-setup is only supported on Linux (current: %s). Skipping setup.\n", runtime.GOOS)
 		return nil
 	}
 
+	local := GetLocalLightpandaVersion()
+
 	latest, err := GetLatestLightpandaVersion()
 	if err != nil {
+		if local != "Not installed" && !strings.Contains(local, "Error") {
+			fmt.Printf("Warning: Could not check latest Lightpanda version (%v). Using installed version: %s\n", err, local)
+			return nil
+		}
 		fmt.Printf("Warning: Could not check latest version (%v). Proceeding with nightly if missing.\n", err)
 		latest = "nightly"
+	}
+
+	if latest != "nightly" && local != "Not installed" && !strings.Contains(local, "Error") && strings.Contains(local, latest) {
+		fmt.Printf("Lightpanda is already up to date (%s).\n", latest)
+		return nil
+	}
+
+	if local != "Not installed" && !strings.Contains(local, "Error") {
+		fmt.Printf("Updating Lightpanda from %s to %s...\n", local, latest)
 	}
 
 	return downloadLightpanda(latest)
 }
 
 func UpdateLightpanda() error {
+	if runtime.GOOS != "linux" {
+		return fmt.Errorf("lightpanda update is only supported on Linux (current: %s)", runtime.GOOS)
+	}
+
 	latest, err := GetLatestLightpandaVersion()
 	if err != nil {
 		return fmt.Errorf("could not check latest version: %v", err)
@@ -89,6 +142,10 @@ func UpdateLightpanda() error {
 }
 
 func downloadLightpanda(version string) error {
+	if runtime.GOOS != "linux" {
+		return fmt.Errorf("automatic Lightpanda download is only supported on Linux")
+	}
+
 	var arch string
 	switch runtime.GOARCH {
 	case "amd64":
@@ -104,8 +161,13 @@ func downloadLightpanda(version string) error {
 		url = fmt.Sprintf("https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-%s-linux", arch)
 	}
 
+	binaryPath := configuredLightpandaPath()
+	if err := os.MkdirAll(filepath.Dir(binaryPath), 0755); err != nil {
+		return err
+	}
+
 	fmt.Printf("Downloading Lightpanda %s...\n", version)
-	
+
 	resp, err := http.Get(url)
 	if err != nil {
 		return err
@@ -146,7 +208,12 @@ func downloadLightpanda(version string) error {
 	}
 
 	fmt.Println("\n[✔] Download complete!")
-	return os.Chmod(binaryPath, 0755)
+	if err := os.Chmod(binaryPath, 0755); err != nil {
+		return err
+	}
+
+	fmt.Printf("[✔] Lightpanda installed at: %s\n", binaryPath)
+	return nil
 }
 
 func printProgress(downloaded, total int64) {
@@ -156,8 +223,8 @@ func printProgress(downloaded, total int64) {
 	}
 	percent := float64(downloaded) / float64(total) * 100
 	bars := int(percent / 2)
-	fmt.Printf("\r[%s%s] %.2f%% (%d/%d bytes)", 
-		strings.Repeat("=", bars), 
-		strings.Repeat(" ", 50-bars), 
+	fmt.Printf("\r[%s%s] %.2f%% (%d/%d bytes)",
+		strings.Repeat("=", bars),
+		strings.Repeat(" ", 50-bars),
 		percent, downloaded, total)
 }

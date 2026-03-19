@@ -4,12 +4,14 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 	"searx-cli/internal/engine"
-	"searx-cli/internal/ui"
 	"searx-cli/internal/reader"
+	"searx-cli/internal/ui"
 	"searx-cli/internal/util"
+	"strings"
 )
+
+var version = "dev"
 
 var defaultSearxInstances = []string{
 	"https://searx.be",
@@ -20,11 +22,12 @@ var defaultSearxInstances = []string{
 func main() {
 	// Custom usage/help
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: searx [options] [query]\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: search [options] [query]\n\n")
 		fmt.Fprintf(os.Stderr, "Commands:\n")
 		fmt.Fprintf(os.Stderr, "  setup         Download and install the latest Lightpanda browser\n")
 		fmt.Fprintf(os.Stderr, "  update        Force update the Lightpanda browser\n")
-		fmt.Fprintf(os.Stderr, "  version       Show Search CLI and Lightpanda versions\n\n")
+		fmt.Fprintf(os.Stderr, "  version       Show Search CLI and Lightpanda versions\n")
+		fmt.Fprintf(os.Stderr, "  --version     Show Search CLI version only\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		fmt.Fprintf(os.Stderr, "  -e <engine>   Search engine: ddg, google, brave, mojeek, hn, searx\n")
 		fmt.Fprintf(os.Stderr, "  -read <url>   Read full article content from the given URL\n")
@@ -33,9 +36,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  -archive      Use archive.today prefix for paywalls\n")
 		fmt.Fprintf(os.Stderr, "  -hn <cat>     Hacker News category: top, new, best, ask, show, job\n\n")
 		fmt.Fprintf(os.Stderr, "Examples:\n")
-		fmt.Fprintf(os.Stderr, "  searx \"golang news\"\n")
-		fmt.Fprintf(os.Stderr, "  searx -e hn -hn best\n")
-		fmt.Fprintf(os.Stderr, "  searx -read \"https://...\" -save\n")
+		fmt.Fprintf(os.Stderr, "  search \"golang news\"\n")
+		fmt.Fprintf(os.Stderr, "  search -e hn -hn best\n")
+		fmt.Fprintf(os.Stderr, "  search -read \"https://...\" -save\n")
 	}
 
 	engineFlag := flag.String("e", "searx", "Engine: ddg, google, brave, mojeek, hn, searx")
@@ -45,7 +48,13 @@ func main() {
 	archiveFlag := flag.Bool("archive", false, "Use archive.today to read the URL (for paywalls)")
 	pandaFlag := flag.Bool("panda", false, "Use lightpanda headless browser for reading")
 	saveFlag := flag.Bool("save", false, "Save the read article to a markdown file")
+	versionFlag := flag.Bool("version", false, "Show Search CLI version")
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Println(version)
+		return
+	}
 
 	// Handle special commands
 	if flag.NArg() > 0 {
@@ -63,7 +72,7 @@ func main() {
 			}
 			return
 		case "version":
-			fmt.Println("Search CLI: v1.2.0")
+			fmt.Printf("Search CLI: %s\n", version)
 			fmt.Printf("Lightpanda: %s\n", util.GetLocalLightpandaVersion())
 			return
 		}
@@ -77,10 +86,10 @@ func main() {
 		if *archiveFlag {
 			finalURL = "https://archive.today/" + finalURL
 		}
-		
+
 		var article *reader.Article
 		var err error
-		
+
 		if *pandaFlag {
 			fmt.Printf("Forcing Lightpanda for: %s...\n", finalURL)
 			article, err = reader.ReadURLWithLightpanda(finalURL)
@@ -117,7 +126,7 @@ func main() {
 	}
 
 	query := strings.Join(flag.Args(), " ")
-	
+
 	if strings.ToLower(*engineFlag) != "hn" && query == "" {
 		flag.Usage()
 		os.Exit(1)

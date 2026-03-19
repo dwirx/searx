@@ -23,10 +23,16 @@ jobs:
           go-version: '1.22'
 
       - name: Build Linux x86_64
-        run: GOOS=linux GOARCH=amd64 go build -o search-x86_64-linux cmd/search/main.go
+        run: GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=${{ github.ref_name }}" -o search-x86_64-linux ./cmd/search
 
       - name: Build Linux aarch64
-        run: GOOS=linux GOARCH=arm64 go build -o search-aarch64-linux cmd/search/main.go
+        run: GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=${{ github.ref_name }}" -o search-aarch64-linux ./cmd/search
+
+      - name: Build macOS x86_64
+        run: GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=${{ github.ref_name }}" -o search-x86_64-darwin ./cmd/search
+
+      - name: Build macOS aarch64
+        run: GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=${{ github.ref_name }}" -o search-aarch64-darwin ./cmd/search
 
       - name: Release
         uses: softprops/action-gh-release@v2
@@ -35,5 +41,7 @@ jobs:
           files: |
             search-x86_64-linux
             search-aarch64-linux
+            search-x86_64-darwin
+            search-aarch64-darwin
             install.sh
           generate_release_notes: true

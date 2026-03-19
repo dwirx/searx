@@ -15,6 +15,7 @@ mem.prof
 
 # Go workspace and vendor artifacts
 vendor/
+.gocache/
 
 # IDE/editor
 .idea/
@@ -29,4 +30,3 @@ Thumbs.db
 # Environment and secrets
 .env
 .env.*
-

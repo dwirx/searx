@@ -1,52 +1,99 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Configuration
 REPO="dwirx/searx"
 BINARY_NAME="search"
+API_URL="https://api.github.com/repos/${REPO}/releases/latest"
 
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-ARCH=$(uname -m)
+for cmd in curl uname mktemp; do
+    if ! command -v "${cmd}" >/dev/null 2>&1; then
+        echo "Missing required command: ${cmd}" >&2
+        exit 1
+    fi
+done
 
-case $ARCH in
-    x86_64) ARCH="x86_64" ;;
-    aarch64|arm64) ARCH="aarch64" ;;
-    *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH="$(uname -m)"
+
+case "${OS}" in
+    linux|darwin) ;;
+    *)
+        echo "Unsupported OS: ${OS} (supported: linux, darwin)" >&2
+        exit 1
+        ;;
 esac
 
-if [ "$OS" != "linux" ]; then
-    echo "This script only supports Linux."
+case "${ARCH}" in
+    x86_64) ARCH="x86_64" ;;
+    aarch64|arm64) ARCH="aarch64" ;;
+    *)
+        echo "Unsupported architecture: ${ARCH}" >&2
+        exit 1
+        ;;
+esac
+
+echo "Detecting latest ${BINARY_NAME} release..."
+LATEST_TAG="$(curl -fsSL "${API_URL}" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')"
+if [ -z "${LATEST_TAG}" ]; then
+    echo "Could not detect latest release tag from ${API_URL}" >&2
     exit 1
 fi
 
-echo "Detecting latest version..."
-LATEST_TAG=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-
-if [ -z "$LATEST_TAG" ]; then
-    echo "Could not find latest release. Please check the repo URL."
-    exit 1
+INSTALLED_VERSION=""
+if command -v "${BINARY_NAME}" >/dev/null 2>&1; then
+    INSTALLED_VERSION="$("${BINARY_NAME}" --version 2>/dev/null || true)"
 fi
 
-DOWNLOAD_URL="https://github.com/$(echo $REPO)/releases/download/$LATEST_TAG/$(echo $BINARY_NAME)-$ARCH-linux"
-
-echo "Downloading $BINARY_NAME $LATEST_TAG for $ARCH-linux..."
-curl -L -o $BINARY_NAME "$DOWNLOAD_URL"
-chmod +x $BINARY_NAME
-
-# Install to /usr/local/bin if possible, otherwise keep in current dir
-if [ -w "/usr/local/bin" ]; then
-    mv $BINARY_NAME /usr/local/bin/
-    echo "[✔] $BINARY_NAME installed to /usr/local/bin/$BINARY_NAME"
+SEARCH_BIN_PATH="$(command -v "${BINARY_NAME}" 2>/dev/null || true)"
+if [ "${INSTALLED_VERSION}" = "${LATEST_TAG}" ] && [ -n "${SEARCH_BIN_PATH}" ]; then
+    echo "${BINARY_NAME} ${LATEST_TAG} is already installed at ${SEARCH_BIN_PATH}."
 else
-    echo "[!] /usr/local/bin is not writable. $BINARY_NAME is in the current directory."
-    echo "You can move it manually: sudo mv $BINARY_NAME /usr/local/bin/"
+    ASSET_NAME="${BINARY_NAME}-${ARCH}-${OS}"
+    DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${LATEST_TAG}/${ASSET_NAME}"
+    TMP_DIR="$(mktemp -d)"
+    TMP_BIN="${TMP_DIR}/${BINARY_NAME}"
+
+    trap 'rm -rf "${TMP_DIR}"' EXIT
+
+    echo "Downloading ${ASSET_NAME}..."
+    curl -fL "${DOWNLOAD_URL}" -o "${TMP_BIN}"
+    chmod +x "${TMP_BIN}"
+
+    INSTALL_DIR=""
+    if [ -w "/usr/local/bin" ]; then
+        INSTALL_DIR="/usr/local/bin"
+        install -m 0755 "${TMP_BIN}" "${INSTALL_DIR}/${BINARY_NAME}"
+    elif command -v sudo >/dev/null 2>&1; then
+        INSTALL_DIR="/usr/local/bin"
+        sudo install -m 0755 "${TMP_BIN}" "${INSTALL_DIR}/${BINARY_NAME}"
+    else
+        INSTALL_DIR="${HOME}/.local/bin"
+        mkdir -p "${INSTALL_DIR}"
+        install -m 0755 "${TMP_BIN}" "${INSTALL_DIR}/${BINARY_NAME}"
+    fi
+
+    SEARCH_BIN_PATH="${INSTALL_DIR}/${BINARY_NAME}"
+    echo "[✔] Installed ${BINARY_NAME} ${LATEST_TAG} to ${SEARCH_BIN_PATH}"
+
+    if ! command -v "${BINARY_NAME}" >/dev/null 2>&1; then
+        echo "[!] ${BINARY_NAME} is not in PATH yet."
+        echo "    Add this to your shell profile:"
+        echo "    export PATH=\"${INSTALL_DIR}:\$PATH\""
+    fi
 fi
 
-# Run setup to ensure lightpanda is ready
-if command -v $BINARY_NAME >/dev/null 2>&1; then
-    $BINARY_NAME setup
-else
-    ./$BINARY_NAME setup
+if [ -n "${SEARCH_BIN_PATH}" ]; then
+    echo "Checking Lightpanda setup..."
+    if "${SEARCH_BIN_PATH}" setup; then
+        echo "[✔] Lightpanda setup checked."
+    else
+        echo "[!] Lightpanda setup failed. You can retry manually:"
+        echo "    ${SEARCH_BIN_PATH} setup"
+    fi
 fi
 
-echo "[✔] Installation complete! Try running: $BINARY_NAME \"golang generics\""
+echo
+echo "[✔] Installation complete!"
+echo "Try:"
+echo "  ${BINARY_NAME} --version"
+echo "  ${BINARY_NAME} -read \"https://www.nytimes.com/2026/03/17/world/middleeast/iran-war-israel-middle-east-recap.html\" -save"
