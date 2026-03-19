@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build Linux x86_64
+        run: GOOS=linux GOARCH=amd64 go build -o search-x86_64-linux cmd/search/main.go
+
+      - name: Build Linux aarch64
+        run: GOOS=linux GOARCH=arm64 go build -o search-aarch64-linux cmd/search/main.go
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            search-x86_64-linux
+            search-aarch64-linux
+            install.sh
+          generate_release_notes: true
