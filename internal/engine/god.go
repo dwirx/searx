@@ -35,6 +35,10 @@ func (g *GodEngine) Search(query string) ([]types.Result, error) {
 		{"Google", "https://www.google.com/search?q=" + url.QueryEscape(query)},
 		{"Brave", "https://search.brave.com/search?q=" + url.QueryEscape(query)},
 		{"DuckDuckGo", "https://duckduckgo.com/html/?q=" + url.QueryEscape(query)},
+		{"Yahoo", "https://search.yahoo.com/search?p=" + url.QueryEscape(query)},
+		{"Mojeek", "https://www.mojeek.com/search?q=" + url.QueryEscape(query)},
+		{"Bing", "https://www.bing.com/search?q=" + url.QueryEscape(query)},
+		{"Ask", "https://www.ask.com/web?q=" + url.QueryEscape(query)},
 	}
 
 	var wg sync.WaitGroup
@@ -65,9 +69,11 @@ func (g *GodEngine) Search(query string) ([]types.Result, error) {
 
 	for res := range resultChan {
 		for _, r := range res {
-			if !seenURLs[r.URL] {
+			// Basic normalization of URLs to avoid dupes
+			cleanURL := strings.TrimRight(r.URL, "/")
+			if !seenURLs[cleanURL] && r.Title != "" && r.URL != "" {
 				allResults = append(allResults, r)
-				seenURLs[r.URL] = true
+				seenURLs[cleanURL] = true
 			}
 		}
 	}
@@ -80,7 +86,7 @@ func (g *GodEngine) Search(query string) ([]types.Result, error) {
 		if len(errs) > 0 {
 			return nil, fmt.Errorf("all engines failed: %s", strings.Join(errs, "; "))
 		}
-		return nil, fmt.Errorf("no results found")
+		return nil, fmt.Errorf("no results found for: %s", query)
 	}
 
 	return allResults, nil
@@ -88,7 +94,8 @@ func (g *GodEngine) Search(query string) ([]types.Result, error) {
 
 func (g *GodEngine) fetchWithLightpanda(lpPath, name, targetURL string) ([]types.Result, error) {
 	// Use Lightpanda to fetch HTML
-	args := []string{"fetch", "--dump", "html", "--strip_mode", "js,css", targetURL}
+	// We add --user_agent_suffix to look slightly different if needed
+	args := []string{"fetch", "--dump", "html", "--strip_mode", "js,css", "--http_timeout", "15000", targetURL}
 	cmd := exec.Command(lpPath, args...)
 	
 	var stdout bytes.Buffer
@@ -120,30 +127,67 @@ func (g *GodEngine) fetchWithLightpanda(lpPath, name, targetURL string) ([]types
 	var results []types.Result
 	switch name {
 	case "Google":
-		doc.Find("div.g").Each(func(i int, s *goquery.Selection) {
-			title := s.Find("h3").Text()
-			link, _ := s.Find("a").Attr("href")
-			snippet := s.Find("div.VwiC3b").Text()
+		// Google standard selectors
+		doc.Find("div.g, div.tF2Cxc").Each(func(i int, s *goquery.Selection) {
+			title := s.Find("h3").First().Text()
+			link, _ := s.Find("a").First().Attr("href")
+			snippet := s.Find("div.VwiC3b, span.st").First().Text()
 			if title != "" && link != "" {
 				results = append(results, types.Result{Title: title, URL: link, Snippet: snippet})
 			}
 		})
 	case "Brave":
 		doc.Find("div.snippet").Each(func(i int, s *goquery.Selection) {
-			title := s.Find(".snippet-title, h3").Text()
+			title := s.Find(".snippet-title, h3").First().Text()
 			link, _ := s.Find("a").First().Attr("href")
-			snippet := s.Find(".snippet-description, .snippet-content").Text()
+			snippet := s.Find(".snippet-description, .snippet-content").First().Text()
 			if title != "" && link != "" {
 				results = append(results, types.Result{Title: title, URL: link, Snippet: snippet})
 			}
 		})
 	case "DuckDuckGo":
 		doc.Find(".result").Each(func(i int, s *goquery.Selection) {
-			title := s.Find(".result__title").Text()
-			link, _ := s.Find(".result__url").Attr("href")
-			snippet := s.Find(".result__snippet").Text()
+			title := s.Find(".result__title").First().Text()
+			link, _ := s.Find(".result__url").First().Attr("href")
+			snippet := s.Find(".result__snippet").First().Text()
 			if title != "" && link != "" {
 				results = append(results, types.Result{Title: strings.TrimSpace(title), URL: strings.TrimSpace(link), Snippet: strings.TrimSpace(snippet)})
+			}
+		})
+	case "Yahoo":
+		doc.Find("div.dd.algo").Each(func(i int, s *goquery.Selection) {
+			title := s.Find("h3.title").Text()
+			link, _ := s.Find("a").First().Attr("href")
+			snippet := s.Find(".compText, .algo-desc").Text()
+			if title != "" && link != "" {
+				results = append(results, types.Result{Title: title, URL: link, Snippet: snippet})
+			}
+		})
+	case "Mojeek":
+		doc.Find("li.result").Each(func(i int, s *goquery.Selection) {
+			title := s.Find("a.title").Text()
+			link, _ := s.Find("a.title").Attr("href")
+			snippet := s.Find("p.s").Text()
+			if title != "" && link != "" {
+				results = append(results, types.Result{Title: title, URL: link, Snippet: snippet})
+			}
+		})
+	case "Bing":
+		doc.Find("li.b_algo").Each(func(i int, s *goquery.Selection) {
+			title := s.Find("h2").Text()
+			link, _ := s.Find("a").First().Attr("href")
+			snippet := s.Find(".b_caption p, .b_snippet").Text()
+			if title != "" && link != "" {
+				results = append(results, types.Result{Title: title, URL: link, Snippet: snippet})
+			}
+		})
+	case "Ask":
+		doc.Find("div.PartialSearchResults-item").Each(func(i int, s *goquery.Selection) {
+			title := s.Find("a.PartialSearchResults-item-title-link").Text()
+			link, _ := s.Find("a.PartialSearchResults-item-title-link").Attr("href")
+			snippet := s.Find("p.PartialSearchResults-item-abstract").Text()
+			if title != "" && link != "" {
+				results = append(results, types.Result{Title: title, URL: link, Snippet: snippet})
 			}
 		})
 	}
