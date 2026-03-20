@@ -21,7 +21,13 @@ type Article struct {
 func SmartRead(urlStr string) (*Article, error) {
 	// Specialized handling for Pasal.id (uses their official API for better structure)
 	if strings.Contains(urlStr, "pasal.id/akn/id/act/") {
-		return fetchPasalContent(urlStr)
+		article, err := fetchPasalContent(urlStr)
+		// If API succeeds but has low content, fallback to scraping
+		if err == nil && len(article.Content) > 500 {
+			return article, nil
+		}
+		fmt.Printf("Pasal.id API has limited content (%d chars). Falling back to web scraping via Lightpanda...\n", len(article.Content))
+		return ReadURLWithLightpanda(urlStr)
 	}
 
 	fmt.Printf("Attempting standard fetch: %s...\n", urlStr)
@@ -58,7 +64,7 @@ func ReadURL(urlStr string) (*Article, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status code %d (Access Denied/Blocked)", resp.StatusCode)
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
@@ -70,97 +76,24 @@ func ReadURL(urlStr string) (*Article, error) {
 }
 
 func extractContent(doc *goquery.Document, isArchive bool) (*Article, error) {
-	// 1. Pre-cleanup: Remove elements that are almost always junk
-	junkSelectors := []string{
-		"script", "style", "iframe", "noscript", "footer", "nav", "header",
-		".header", ".footer", ".nav", ".sidebar", ".ad", ".ads", "#wm-ipp-base",
-		".mw-editsection", ".newsletter-signup", ".social-share", ".related-posts",
-		".duet--article--newsletter-form", ".duet--content-cards", ".duet--article--author-bio",
-		".duet--article--related-list", ".duet--article--social-share", "aside",
-		".duet--article--article-footer", ".duet--article--related-item",
-		".duet--article--top-rule", ".duet--article--article-header",
-		".duet--article--article-meta", ".duet--article--ad-unit",
-		".related-content", ".recommendations", ".trending-now", ".comments-area",
-		".tags-list", ".post-tags", ".article-tags",
-	}
-	for _, sel := range junkSelectors {
-		doc.Find(sel).Remove()
-	}
-
-	// 2. Get Title
-	title := strings.TrimSpace(doc.Find("h1").First().Text())
-	if title == "" {
-		title = strings.TrimSpace(doc.Find("title").First().Text())
-	}
-
+	title := strings.TrimSpace(doc.Find("title").Text())
 	var lines []string
-	seenParagraphs := make(map[string]bool)
 
-	// 3. Find Article Body
-	var body *goquery.Selection
-	selectors := []string{
-		"article", "main", ".duet--article--article-body", ".article-body",
-		".story-body", ".post-content", "section[name='articleBody']",
-		".entry-content", ".content-body", "#article-content", ".article__body",
+	// Target primary content containers
+	selectors := "article, main, .content, .post-content, .article-body, .media-ui-Story_body"
+	contentArea := doc.Find(selectors).First()
+	if contentArea.Length() == 0 {
+		contentArea = doc.Find("body")
 	}
 
-	for _, sel := range selectors {
-		if found := doc.Find(sel); found.Length() > 0 {
-			body = found
-			break
-		}
-	}
-
-	if body == nil {
-		body = doc.Find("body")
-	}
-
-	// 4. Extract Structured Content
-	body.Find("p, h2, h3, h4, li, blockquote").Each(func(i int, s *goquery.Selection) {
-		// Aggressive container check
-		if s.Closest(".newsletter, .ad, .social, .related, aside, footer, nav, .duet--article--newsletter-form, .duet--content-cards, #most-popular").Length() > 0 {
-			return
-		}
-
+	contentArea.Find("p, h1, h2, h3, h4, li, blockquote").Each(func(i int, s *goquery.Selection) {
 		text := strings.TrimSpace(s.Text())
 		if text == "" {
 			return
 		}
 
-		// FILTER JUNK PHRASES
-		junkPhrases := []string{
-			"daily email digest", "homepage feed", "FollowFollow",
-			"Posts from this topic", "Posts from this author",
-			"A free daily digest", "Terms of Service", "Privacy Policy",
-			"See All by", "Senior Reviewer", "Senior Reporter",
-			"link copied", "copy link", "share on facebook", "share on twitter",
-			"Read more:", "Sign up for", "Log in", "Subscribe",
-		}
-		for _, phrase := range junkPhrases {
-			if strings.Contains(strings.ToLower(text), strings.ToLower(phrase)) {
-				return
-			}
-		}
-
-		// UI Keywork Filtering (Very short lines)
-		if len(text) < 20 {
-			uiKeywords := []string{"Link", "Share", "Gift", "Report", "Gaming", "Policy", "Antitrust", "Comment", "Print", "Email"}
-			for _, kw := range uiKeywords {
-				if text == kw {
-					return
-				}
-			}
-		}
-
-		// Deduplication (don't add the same paragraph twice)
-		if seenParagraphs[text] {
-			return
-		}
-		seenParagraphs[text] = true
-
-		tagName := goquery.NodeName(s)
-		switch tagName {
-		case "h2":
+		switch goquery.NodeName(s) {
+		case "h1", "h2":
 			if text == "Most Popular" || text == "The Verge Daily" || text == "Comments" || text == "Related" {
 				return
 			}
@@ -183,7 +116,6 @@ func extractContent(doc *goquery.Document, isArchive bool) (*Article, error) {
 	content := strings.Join(lines, "\n")
 	content = strings.TrimSpace(content)
 
-	// Final whitespace cleanup
 	for strings.Contains(content, "\n\n\n") {
 		content = strings.ReplaceAll(content, "\n\n\n", "\n\n")
 	}
@@ -219,10 +151,7 @@ func ReadURLWithLightpanda(urlStr string) (*Article, error) {
 	return extractContent(doc, isArchive)
 }
 
-// fetchPasalContent fetches full law details from pasal.id API
 func fetchPasalContent(urlStr string) (*Article, error) {
-	// Extract FRBR URI from URL
-	// URL example: https://pasal.id/akn/id/act/uu/2020/11#pasal-1
 	parts := strings.Split(urlStr, "pasal.id")
 	if len(parts) < 2 {
 		return nil, fmt.Errorf("invalid pasal.id URL")
@@ -243,10 +172,11 @@ func fetchPasalContent(urlStr string) (*Article, error) {
 
 	var data struct {
 		Work struct {
-			Title  string `json:"title"`
-			Number string `json:"number"`
-			Year   int    `json:"year"`
-			Status string `json:"status"`
+			Title           string `json:"title"`
+			Number          string `json:"number"`
+			Year            int    `json:"year"`
+			Status          string `json:"status"`
+			ContentVerified bool   `json:"content_verified"`
 		} `json:"work"`
 		Articles []struct {
 			Type   string `json:"type"` // bab, pasal
@@ -271,6 +201,10 @@ func fetchPasalContent(urlStr string) (*Article, error) {
 
 	title := fmt.Sprintf("%s (No. %s Th %d)", data.Work.Title, data.Work.Number, data.Work.Year)
 	var content strings.Builder
+
+	if !data.Work.ContentVerified {
+		content.WriteString("⚠️ PERINGATAN: Naskah digital untuk peraturan ini belum terverifikasi atau mungkin tidak tersedia secara lengkap.\n\n")
+	}
 
 	content.WriteString(fmt.Sprintf("STATUS: %s\n", strings.ToUpper(data.Work.Status)))
 

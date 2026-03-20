@@ -18,22 +18,44 @@ search -pasal "hak cipta"
 ### 2. Filter Berdasarkan Jenis Peraturan
 Gunakan flag `-law-type` untuk mempersempit hasil pencarian (misal: hanya Undang-Undang atau Peraturan Pemerintah).
 
+### 3. Filter Berdasarkan Tahun dan Status
+Gunakan `-law-year` untuk tahun tertentu dan `-law-status` untuk memantau status hukum.
+
 **Contoh:**
 ```bash
-search -pasal -law-type UU "ketenagakerjaan"
-search -pasal -law-type PP "pajak"
-search -pasal -law-type PERPRES "gaji"
+search -pasal -law-year 2024         # Semua hukum tahun 2024
+search -pasal -law-status dicabut    # Cari hukum yang sudah dicabut
+search -pasal -law-type UU -law-year 2023 -law-status berlaku
 ```
 
 **Kode Jenis Peraturan yang Didukung:**
 - `UUD`: Undang-Undang Dasar
+- `TAP_MPR`: Ketetapan MPR
 - `UU`: Undang-Undang
 - `PP`: Peraturan Pemerintah
 - `PERPPU`: Perpu
 - `PERPRES`: Peraturan Presiden
-- `PERMEN`: Peraturan Menteri
+- `KEPPRES`: Keputusan Presiden
 - `INPRES`: Instruksi Presiden
+- `PENPRES`: Penetapan Presiden
+- `PERMEN`: Peraturan Menteri
+- `PERMENKUMHAM`: Peraturan Menkumham
+- `PERMENKUM`: Peraturan Menkum
+- `PERBAN`: Peraturan Badan
 - `PERDA`: Peraturan Daerah
+- `PERDA_PROV`: Perda Provinsi
+- `PERDA_KAB`: Perda Kab/Kota
+- `KEPMEN`: Keputusan Menteri
+- `SE`: Surat Edaran
+- `PERMA`: Peraturan MA
+- `PBI`: Peraturan Bank Indonesia
+- `UUDRT`: UU Darurat
+- `UUDS`: UUDS 1950
+
+**Nilai Status yang Didukung:**
+- `berlaku`
+- `dicabut`
+- `diubah`
 
 ---
 

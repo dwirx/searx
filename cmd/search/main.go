@@ -54,7 +54,7 @@ func fallbackEngineNames(primary string) []string {
 	}
 }
 
-func buildEngine(name, searxInstance, hnCategory, polyCat string, rssFeeds map[string]string, rssSource string, lawType string) (engine.SearchEngine, bool) {
+func buildEngine(name, searxInstance, hnCategory, polyCat string, rssFeeds map[string]string, rssSource string, lawType, lawYear, lawStatus string) (engine.SearchEngine, bool) {
 	switch strings.ToLower(name) {
 	case "google":
 		return &engine.GoogleEngine{}, true
@@ -73,7 +73,7 @@ func buildEngine(name, searxInstance, hnCategory, polyCat string, rssFeeds map[s
 	case "rss":
 		return &engine.RSSEngine{Feeds: rssFeeds, FilterSource: rssSource}, true
 	case "pasal":
-		return &engine.PasalEngine{LawType: lawType}, true
+		return &engine.PasalEngine{LawType: lawType, LawYear: lawYear, LawStatus: lawStatus}, true
 	default:
 		return nil, false
 	}
@@ -166,6 +166,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  -e <engine>   Search engine: ddg, google, brave, mojeek, hn, searx, polymarket, rss, pasal\n")
 		fmt.Fprintf(os.Stderr, "  -market       Shortcut for Polymarket (use -cat for specific topic)\n")
 		fmt.Fprintf(os.Stderr, "  -pasal        Shortcut for Indonesian Laws (pasal.id)\n")
+		fmt.Fprintf(os.Stderr, "  -law-type <t> Filter Laws by type (UU, PP, PERPRES, etc.)\n")
+		fmt.Fprintf(os.Stderr, "  -law-year <y> Filter Laws by year (e.g. 2024)\n")
+		fmt.Fprintf(os.Stderr, "  -law-status <s> Filter by status (berlaku, dicabut, diubah)\n")
 		fmt.Fprintf(os.Stderr, "  -cat <topic>  Polymarket Category: trending, breaking, new, politics, crypto, sports, etc.\n")
 		fmt.Fprintf(os.Stderr, "  -rss          Read subscribed RSS feeds (use -source for specific feed)\n")
 		fmt.Fprintf(os.Stderr, "  -source <name> Specific RSS source: bloomberg, cnn, bbc, theverge, wired, etc.\n")
@@ -195,6 +198,8 @@ func main() {
 	delRSSFlag := flag.String("del-rss", "", "Remove an RSS feed by name")
 	pasalFlag := flag.Bool("pasal", false, "Search Indonesian laws (pasal.id)")
 	lawTypeFlag := flag.String("law-type", "", "Filter Indonesian laws by type (UU, PP, PERPRES, etc.)")
+	lawYearFlag := flag.String("law-year", "", "Filter Indonesian laws by year")
+	lawStatusFlag := flag.String("law-status", "", "Filter Indonesian laws by status (berlaku, dicabut, diubah)")
 	readURL := flag.String("read", "", "URL to read article content from")
 	archiveFlag := flag.Bool("archive", false, "Use archive.today to read the URL (for paywalls)")
 	pandaFlag := flag.Bool("panda", false, "Use lightpanda headless browser for reading")
@@ -432,7 +437,7 @@ func main() {
 	case "rss":
 		searchEngine = &engine.RSSEngine{Feeds: cfg.RSSFeeds, FilterSource: *sourceFlag}
 	case "pasal":
-		searchEngine = &engine.PasalEngine{LawType: *lawTypeFlag}
+		searchEngine = &engine.PasalEngine{LawType: *lawTypeFlag, LawYear: *lawYearFlag, LawStatus: *lawStatusFlag}
 	default:
 		fmt.Printf("Unknown engine: %s\n", *engineFlag)
 		os.Exit(1)
@@ -450,7 +455,7 @@ func main() {
 		primary := strings.ToLower(*engineFlag)
 		if shouldFallback(primary, err) {
 			for _, fallbackName := range fallbackEngineNames(primary) {
-				fallbackEngine, ok := buildEngine(fallbackName, "", *hnCatFlag, *catFlag, cfg.RSSFeeds, *sourceFlag, *lawTypeFlag)
+				fallbackEngine, ok := buildEngine(fallbackName, "", *hnCatFlag, *catFlag, cfg.RSSFeeds, *sourceFlag, *lawTypeFlag, *lawYearFlag, *lawStatusFlag)
 				if !ok {
 					continue
 				}
@@ -482,11 +487,11 @@ func main() {
 				qDisplay = "All Feeds"
 			}
 		} else if strings.ToLower(*engineFlag) == "pasal" {
-			if *lawTypeFlag != "" {
-				qDisplay = "Hukum (" + strings.ToUpper(*lawTypeFlag) + ")"
-			} else {
-				qDisplay = "Semua Hukum"
-			}
+			parts := []string{"Hukum"}
+			if *lawTypeFlag != "" { parts = append(parts, strings.ToUpper(*lawTypeFlag)) }
+			if *lawYearFlag != "" { parts = append(parts, *lawYearFlag) }
+			if *lawStatusFlag != "" { parts = append(parts, "("+*lawStatusFlag+")") }
+			qDisplay = strings.Join(parts, " ")
 		} else {
 			qDisplay = "Search"
 		}

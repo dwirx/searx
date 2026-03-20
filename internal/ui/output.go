@@ -199,6 +199,13 @@ func PrintPasalResults(engineName string, query string, results []types.Result) 
 			}
 		}
 
+		// Handle [UNVERIFIED] tag
+		verifiedText := ""
+		if strings.HasPrefix(snippet, "[UNVERIFIED]") {
+			verifiedText = fmt.Sprintf(" %s[UNVERIFIED]%s", colorRed, colorReset)
+			snippet = strings.TrimSpace(strings.TrimPrefix(snippet, "[UNVERIFIED]"))
+		}
+
 		// Color the type tag [UU], [PP], etc.
 		if strings.HasPrefix(title, "Pasal") {
 			parts := strings.SplitN(title, "|", 2)
@@ -222,7 +229,7 @@ func PrintPasalResults(engineName string, query string, results []types.Result) 
 		}
 
 		fmt.Printf("%s%d.%s %s\n", colorBold, i+1, colorReset, title)
-		fmt.Printf("   Status: %s%s%s\n", statusColor, statusText, colorReset)
+		fmt.Printf("   Status: %s%s%s%s\n", statusColor, statusText, colorReset, verifiedText)
 		
 		if snippet != "" {
 			lines := strings.Split(snippet, "\n")

@@ -33,9 +33,10 @@ Cari pasal atau undang-undang RI.
 **Contoh:**
 ```bash
 search -pasal "upah minimum"
-search -pasal -law-type UU "cipta kerja"
+search -pasal -law-year 2024
+search -pasal -law-type UU -law-status dicabut
 ```
-Lihat [docs/PASAL.md](PASAL.md) untuk panduan lengkap.
+Lihat [docs/PASAL.md](PASAL.md) for full guide.
 
 ## 📰 RSS Feeds
 Manage and read your favorite news feeds directly from the CLI.

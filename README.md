@@ -53,11 +53,13 @@ search -market -cat politics         # Filter by Politics
 *Supported categories: `trending`, `breaking`, `new`, `politics`, `crypto`, `sports`, `finance`, `geopolitics`, `tech`, `culture`, `weather`.*
 
 ### 3. ⚖️ Hukum Indonesia (Pasal.id)
-Cari pasal atau undang-undang dengan mudah.
+Cari pasal atau undang-undang dengan filter lengkap.
 ```bash
-search -pasal "upah minimum"         # Cari tentang upah minimum
-search -pasal "hak cipta"            # Cari tentang hak cipta
+search -pasal "upah minimum"         # Cari kata kunci
+search -pasal -law-year 2024         # Daftar semua peraturan tahun 2024
+search -pasal -law-type UU -law-year 2023 # Filter spesifik
 ```
+*Filter: `-law-type` (UU, PP, dll), `-law-year` (2024), `-law-status` (berlaku, dicabut).*
 
 ### 4. 📰 RSS Feed Manager
 Stay updated with your favorite news sources.
