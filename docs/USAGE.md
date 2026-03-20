@@ -10,6 +10,42 @@ Use a specific engine:
 ```bash
 search -e google "your query"
 search -e mojeek "your query"
+search -e bing "your query"
+```
+
+## ⚡ God Mode (Anti-Bot Aggregator)
+God Mode searches across 7 engines simultaneously (**Google, Brave, DDG, Yahoo, Mojeek, Bing, Ask**) using **Lightpanda** to bypass bot protection.
+
+**Shortcut:**
+```bash
+search -god "your query"
+```
+
+## 🤖 You.com AI Search
+Advanced search, agentic research, and web scraping via You.com API.
+
+**Standard Search:**
+```bash
+search -you "your query"
+```
+
+**Agentic Research (Cited Answers):**
+```bash
+search -you -you-mode research "complex question"
+```
+
+**Web Content Scraper:**
+```bash
+search -you -you-mode contents "https://url.com"
+```
+See [docs/YOU.md](YOU.md) for full guide.
+
+## 🔍 Bing Search
+Native Bing search integration with Lightpanda anti-bot protection.
+
+**Shortcut:**
+```bash
+search -bing "your query"
 ```
 
 ## 📊 Polymarket (Real-time Markets)
