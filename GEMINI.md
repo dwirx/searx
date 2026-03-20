@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**searx-cli** is a powerful, modular, and distraction-free CLI search tool written in Go. It allows users to search across multiple engines (DuckDuckGo, Google, Brave, Mojeek, Hacker News, SearX) and read articles directly in the terminal, bypassing paywalls and bot protection using intelligent fallbacks like Lightpanda (a headless browser) and Archive.today.
+**searx-cli** is a powerful, modular, and distraction-free CLI search tool written in Go. It allows users to search across multiple engines (DuckDuckGo, Google, Brave, Mojeek, Hacker News, SearX, Exa, Firecrawl) and read articles directly in the terminal, bypassing paywalls and bot protection using intelligent fallbacks like Lightpanda (a headless browser) and Archive.today.
 
 ### Main Technologies
 - **Language**: Go (v1.25.5+)
@@ -37,15 +37,23 @@ go run ./cmd/search/main.go "your search query"
 
 ### Key Commands
 - `search <query>`: Search using the default engine (DuckDuckGo).
-- `search -e <engine> <query>`: Search using a specific engine (e.g., `mojeek`, `google`, `hn`, `polymarket`, `pasal`).
+- `search -e <engine> <query>`: Search using a specific engine (e.g., `mojeek`, `google`, `hn`, `polymarket`, `pasal`, `exa`, `fire`).
 - `search -market [-cat <topic>]`: Shortcut for Polymarket markets with real-time price tracking and color coding.
-- `search -pasal <query>`: Shortcut for Indonesian Laws search (pasal.id).
-- `search -rss [-source <name>] [<query>]`: Read and search through subscribed RSS feeds.
-    - Specific Source: Use `-source bloomberg` to only read a specific feed.
-    - Configuration: `~/.local/share/searx/rss.yaml`
-    - Manage: `-add-rss name=url`, `-del-rss name`, `list-rss`.
-- `search check-rss`: Validate all subscribed feeds and automatically remove broken ones.
-- `search list-rss`: List all currently subscribed RSS feeds.
+- `search -exa <query>`: Shortcut for Exa Neural Search (requires API key in .env).
+    - `-exa-type <neural|keyword>`: Choose search algorithm.
+    - `-exa-cat <category>`: Filter by category (news, company, research paper, etc.).
+    - `-exa-include <domains>`: Comma-separated domains to include.
+    - `-exa-exclude <domains>`: Comma-separated domains to exclude.
+    - `-exa-start <YYYY-MM-DD>`: Filter by published date.
+- `search -fire <query>`: Shortcut for Firecrawl Search (requires API key in .env).
+    - `-fire-limit <n>`: Limit number of results.
+    - `-fire-scrape`: Enable full page scraping for each result.
+    - `-fire-lang <lang>`: Search in specific language.
+- `search epaper <cmd>`: Access Kompas.id ePaper (requires cookies in .env).
+    - `list`: List available editions from the last 30 days.
+    - `read <date>`: Show info and PDF URL for a specific edition.
+    - `download <date>`: Download the full ePaper PDF.
+- `search -open <query>`: Automatically open the first search result in your default browser.
 - `search -read <url> [-save]`: Extract, read, and optionally save content to Markdown.
 - `search setup`: Download and install the Lightpanda browser (Linux only).
 - `search update`: Update the Search CLI and Lightpanda.

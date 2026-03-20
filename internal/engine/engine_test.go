@@ -8,6 +8,8 @@ func TestEngines(t *testing.T) {
 	engines := []SearchEngine{
 		&DuckDuckGoEngine{},
 		&BraveEngine{},
+		&ExaEngine{},
+		&FirecrawlEngine{},
 	}
 
 	for _, e := range engines {

@@ -1,10 +1,13 @@
 package engine
 
 import (
+	"bytes"
 	"fmt"
-	"net/http"
+	"math/rand"
 	"net/url"
+	"os/exec"
 	"searx-cli/internal/types"
+	"searx-cli/internal/util"
 	"strings"
 	"time"
 
@@ -17,68 +20,161 @@ func (g *GoogleEngine) Name() string {
 	return "Google"
 }
 
+var userAgents = []string{
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+	"Mozilla/5.0 (AppleWebKit/537.36; KHTML, like Gecko) Chrome/121.0.6167.160 Safari/537.36",
+}
+
+var googleDomains = []string{
+	"www.google.com",
+	"www.google.co.uk",
+	"www.google.co.id",
+	"www.google.ca",
+	"www.google.de",
+}
+
+func randomIP() string {
+	return fmt.Sprintf("%d.%d.%d.%d", rand.Intn(255), rand.Intn(255), rand.Intn(255), rand.Intn(255))
+}
+
 func (g *GoogleEngine) Search(query string) ([]types.Result, error) {
-	// Using more robust URL and params
-	u, _ := url.Parse("https://www.google.com/search")
+	rand.Seed(time.Now().UnixNano())
+	domain := googleDomains[rand.Intn(len(googleDomains))]
+	
+	u, _ := url.Parse(fmt.Sprintf("https://%s/search", domain))
 	q := u.Query()
 	q.Set("q", query)
-	q.Set("gbv", "1") // No Javascript version (Old but reliable for scraping)
+	q.Set("gbv", "1")
+	// udm=14 often gives a cleaner results-only view that might bypass some modern bot checks
+	if rand.Intn(2) == 0 {
+		q.Set("udm", "14")
+	}
 	u.RawQuery = q.Encode()
 
-	client := &http.Client{Timeout: 15 * time.Second}
-	req, _ := http.NewRequest("GET", u.String(), nil)
+	results, err := g.SearchWithLightpanda(u.String())
+	if err == nil && len(results) > 0 {
+		return results, nil
+	}
+
+	// Fallback strategy: try other domains and randomized delays
+	for i := 0; i < 2; i++ {
+		time.Sleep(time.Duration(rand.Intn(2000)+1000) * time.Millisecond)
+		newDomain := googleDomains[rand.Intn(len(googleDomains))]
+		u.Host = newDomain
+		results, err = g.SearchWithLightpanda(u.String())
+		if err == nil && len(results) > 0 {
+			return results, nil
+		}
+	}
+
+	// Final fallback to other engines
+	fmt.Println("Google stealth methods blocked. Falling back to other engines...")
 	
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	ddg := &DuckDuckGoEngine{}
+	res, err := ddg.Search(query)
+	if err == nil && len(res) > 0 {
+		return res, nil
+	}
 
-	resp, err := client.Do(req)
+	instances := []string{"https://searx.be", "https://paulgo.io", "https://searx.org"}
+	for _, inst := range instances {
+		searx := &SearxEngine{InstanceURL: inst}
+		res, err := searx.Search(query)
+		if err == nil && len(res) > 0 {
+			return res, nil
+		}
+	}
+	
+	return nil, fmt.Errorf("google failed and all fallbacks exhausted")
+}
+
+func (g *GoogleEngine) SearchWithLightpanda(urlStr string) ([]types.Result, error) {
+	lightpandaPath, err := util.LightpandaBinaryPath()
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("google returned %d", resp.StatusCode)
+	ua := userAgents[rand.Intn(len(userAgents))]
+	suffix := " " + ua
+
+	// Note: Lightpanda might not support --header directly in 'fetch' command based on help output,
+	// but we can try to influence it via UA or other flags if available.
+	// Since --help didn't show --header, we'll stick to UA suffix and hope for the best.
+	cmd := exec.Command(lightpandaPath, "fetch", "--dump", "html", "--user_agent_suffix", suffix, urlStr)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+	if err != nil {
+		return nil, fmt.Errorf("lightpanda error: %v, stderr: %s", err, stderr.String())
 	}
 
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(stdout.Bytes()))
 	if err != nil {
 		return nil, err
 	}
 
-	var results []Result
-	// Selectors for GBV=1 mode
-	doc.Find("div.ZINbbc").Each(func(i int, s *goquery.Selection) {
+	return g.parseGoogleResults(doc)
+}
+
+func (g *GoogleEngine) parseGoogleResults(doc *goquery.Document) ([]types.Result, error) {
+	var results []types.Result
+	
+	// Modern selectors
+	doc.Find("div.g, div.tF2Cxc, div.MjjYud").Each(func(i int, s *goquery.Selection) {
 		if len(results) >= 10 {
 			return
 		}
-		
-		// Each result usually has a title in an h3
-		title := s.Find("h3").Text()
-		if title == "" {
-			return
-		}
+		title := s.Find("h3").First().Text()
+		link, _ := s.Find("a").First().Attr("href")
+		snippet := s.Find("div.VwiC3b, span.st").First().Text()
 
-		linkNode := s.Find("a").First()
-		href, _ := linkNode.Attr("href")
-		
-		// Google links in GBV=1 are often /url?q=...
-		cleanURL := strings.TrimPrefix(href, "/url?q=")
-		if idx := strings.Index(cleanURL, "&"); idx != -1 {
-			cleanURL = cleanURL[:idx]
-		}
-		
-		// Snippet is usually in a div with specific class or just text after title
-		snippet := s.Find(".VwiC3b, .BNeawe.s3v9rd.AP7Wnd").First().Text()
-
-		if cleanURL != "" && !strings.HasPrefix(cleanURL, "/") {
-			results = append(results, Result{
+		if title != "" && link != "" && !strings.HasPrefix(link, "/") {
+			results = append(results, types.Result{
 				Title:   title,
-				URL:     cleanURL,
+				URL:     link,
 				Snippet: snippet,
 			})
 		}
 	})
+
+	// GBV=1 / Legacy / Mobile selectors
+	if len(results) == 0 {
+		doc.Find("div.ZINbbc, div.kCrYT").Each(func(i int, s *goquery.Selection) {
+			if len(results) >= 10 {
+				return
+			}
+			
+			title := s.Find("h3").Text()
+			if title == "" {
+				title = s.Find(".vv798d").Text()
+			}
+			if title == "" { return }
+
+			linkNode := s.Find("a").First()
+			href, _ := linkNode.Attr("href")
+			
+			cleanURL := strings.TrimPrefix(href, "/url?q=")
+			if idx := strings.Index(cleanURL, "&"); idx != -1 {
+				cleanURL = cleanURL[:idx]
+			}
+			
+			snippet := s.Find(".VwiC3b, .BNeawe.s3v9rd.AP7Wnd, .st").First().Text()
+
+			if cleanURL != "" && !strings.HasPrefix(cleanURL, "/") {
+				results = append(results, types.Result{
+					Title:   title,
+					URL:     cleanURL,
+					Snippet: snippet,
+				})
+			}
+		})
+	}
 
 	return results, nil
 }

@@ -1,13 +1,18 @@
 package engine
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"os/exec"
 	"searx-cli/internal/types"
+	"searx-cli/internal/util"
 	"strings"
 	"time"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 type PasalEngine struct {
@@ -57,6 +62,19 @@ func (p *PasalEngine) Name() string {
 }
 
 func (p *PasalEngine) Search(query string) ([]types.Result, error) {
+	results, err := p.searchAPI(query)
+	if err != nil || len(results) == 0 {
+		fmt.Printf("Pasal.id API failed or empty (%v). Attempting Web Search via Lightpanda...\n", err)
+		webResults, webErr := p.searchWeb(query)
+		if webErr == nil && len(webResults) > 0 {
+			return webResults, nil
+		}
+		return results, err
+	}
+	return results, nil
+}
+
+func (p *PasalEngine) searchAPI(query string) ([]types.Result, error) {
 	var apiURL string
 	var useLawsEndpoint bool
 
@@ -132,6 +150,65 @@ func (p *PasalEngine) Search(query string) ([]types.Result, error) {
 			))
 		}
 	}
+
+	return results, nil
+}
+
+func (p *PasalEngine) searchWeb(query string) ([]types.Result, error) {
+	lightpandaPath, err := util.LightpandaBinaryPath()
+	if err != nil {
+		return nil, err
+	}
+
+	searchURL := fmt.Sprintf("https://pasal.id/cari?q=%s", url.QueryEscape(query))
+	cmd := exec.Command(lightpandaPath, "fetch", "--dump", "html", searchURL)
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		return nil, err
+	}
+
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(stdout.Bytes()))
+	if err != nil {
+		return nil, err
+	}
+
+	var results []types.Result
+	// Select card containers
+	doc.Find("div[data-slot='card']").Each(func(i int, s *goquery.Selection) {
+		if len(results) >= 15 { return }
+
+		// Title logic
+		h2 := s.Find("h2").First()
+		titleShort := strings.TrimSpace(h2.Text()) // e.g. UU 11/2020
+		fullTitle := strings.TrimSpace(s.Find("p.text-muted-foreground").First().Text())
+		
+		status := "BERLAKU"
+		s.Find("span[data-slot='badge']").Each(func(j int, b *goquery.Selection) {
+			txt := strings.ToUpper(strings.TrimSpace(b.Text()))
+			if txt == "BERLAKU" || txt == "DICABUT" || txt == "DIUBAH" {
+				status = txt
+			}
+		})
+
+		link, _ := s.Parent().Attr("href") // Usually the card is wrapped in a Link
+		if link == "" {
+			// Try finding a inside card
+			link, _ = s.Find("a").First().Attr("href")
+		}
+
+		if titleShort != "" && link != "" {
+			if !strings.HasPrefix(link, "http") {
+				link = "https://pasal.id" + link
+			}
+			
+			results = append(results, types.Result{
+				Title:   fmt.Sprintf("%s - %s", titleShort, fullTitle),
+				URL:     link,
+				Snippet: fmt.Sprintf("[STATUS:%s] [WEB] %s", status, fullTitle),
+			})
+		}
+	})
 
 	return results, nil
 }

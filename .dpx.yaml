@@ -1,0 +1,15 @@
+version: 1
+default_suffix: .dpx
+key_file: ~/.config/dpx/age-keys.txt
+age:
+    recipients:
+        - age1fcppx2qfgy0a77kq9wcag895jeces0qm2yg2sskwmzyuuh5trgpqdv82t2
+discovery:
+    include:
+        - .env
+        - .env.*
+        - '*.env'
+        - .secret*
+        - .credentials*
+policy:
+    creation_rules: []

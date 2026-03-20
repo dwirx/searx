@@ -2,6 +2,7 @@ package engine
 
 import (
 	"bytes"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,24 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 )
+
+type rssFeed struct {
+	XMLName xml.Name `xml:"rss"`
+	Channel channel  `xml:"channel"`
+}
+
+type channel struct {
+	Title string `xml:"title"`
+	Items []item  `xml:"item"`
+}
+
+type item struct {
+	Title       string `xml:"title"`
+	Link        string `xml:"link"`
+	Description string `xml:"description"`
+	PubDate     string `xml:"pubDate"`
+	GUID        string `xml:"guid"`
+}
 
 type RSSEngine struct {
 	Feeds        map[string]string // Name -> URL
@@ -60,7 +79,6 @@ func (r *RSSEngine) Search(query string) ([]types.Result, error) {
 			if n == "bloomberg_asia" {
 				items, err = r.fetchBloombergAsiaStealth(u, query)
 			} else if strings.Contains(strings.ToLower(n), "bloomberg") || 
-					 strings.Contains(strings.ToLower(n), "wsj") ||
 					 strings.Contains(strings.ToLower(n), "reuters") {
 				items, err = r.fetchWithPandaEngine(u, n, query)
 			} else {
@@ -173,13 +191,16 @@ func (r *RSSEngine) parseDocument(doc *goquery.Document, feedName, query string)
 		items.Each(func(i int, s *goquery.Selection) {
 			if len(results) >= 20 { return }
 			title := cleanString(s.Find("title").First().Text())
+			
+			// Try link tag, then guid, then link[href]
 			link := s.Find("link").First().Text()
+			if link == "" {
+				link = s.Find("guid").First().Text()
+			}
 			if link == "" { 
 				link, _ = s.Find("link").First().Attr("href") 
-				if link == "" {
-					link = s.Find("guid").First().Text()
-				}
 			}
+
 			desc := cleanString(s.Find("description").First().Text())
 			if desc == "" { desc = cleanString(s.Find("summary").First().Text()) }
 
@@ -294,6 +315,33 @@ func (r *RSSEngine) fetchGenericFeed(client *http.Client, urlStr, feedName, quer
 	if resp.StatusCode != http.StatusOK { return nil, fmt.Errorf("status %d", resp.StatusCode) }
 	
 	bodyBytes, _ := io.ReadAll(resp.Body)
+
+	// Try standard XML parsing first
+	var feed rssFeed
+	if err := xml.Unmarshal(bodyBytes, &feed); err == nil && len(feed.Channel.Items) > 0 {
+		var results []types.Result
+		for _, it := range feed.Channel.Items {
+			title := cleanString(it.Title)
+			link := strings.TrimSpace(it.Link)
+			if link == "" {
+				link = strings.TrimSpace(it.GUID)
+			}
+			desc := cleanString(it.Description)
+
+			if r.matchQuery(title, desc, query) {
+				if len(desc) > 250 { desc = desc[:247] + "..." }
+				results = append(results, types.Result{
+					Title: fmt.Sprintf("[%s] %s", strings.Title(feedName), title),
+					URL: link,
+					Snippet: desc,
+				})
+			}
+			if len(results) >= 20 { break }
+		}
+		return results, nil
+	}
+
+	// Fallback to goquery for non-standard or Atom feeds
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(bodyBytes))
 	if err != nil { return nil, err }
 

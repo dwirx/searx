@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"searx-cli/internal/util"
 	"strings"
@@ -20,13 +21,29 @@ type Article struct {
 
 func SmartRead(urlStr string) (*Article, error) {
 	// Specialized handling for Pasal.id (uses their official API for better structure)
-	if strings.Contains(urlStr, "pasal.id/akn/id/act/") {
-		article, err := fetchPasalContent(urlStr)
+	// Supports both /akn/id/act/ and /peraturan/ paths
+	if strings.Contains(urlStr, "pasal.id/akn/id/act/") || strings.Contains(urlStr, "pasal.id/peraturan/") {
+		finalURL := urlStr
+		if strings.Contains(urlStr, "/peraturan/") {
+			// Redirect web URL to API logic if possible, or just let API fetcher handle it
+			// The fetchPasalContent currently expects /akn/ but we can make it smarter
+		}
+		article, err := fetchPasalContent(finalURL)
 		// If API succeeds but has low content, fallback to scraping
 		if err == nil && len(article.Content) > 500 {
 			return article, nil
 		}
 		fmt.Printf("Pasal.id API has limited content (%d chars). Falling back to web scraping via Lightpanda...\n", len(article.Content))
+		return ReadURLWithLightpanda(urlStr)
+	}
+
+	if strings.Contains(urlStr, "kompas.id") {
+		fmt.Printf("Attempting authenticated Kompas.id fetch: %s...\n", urlStr)
+		article, err := ReadURL(urlStr)
+		if err == nil && len(article.Content) > 500 {
+			return article, nil
+		}
+		fmt.Printf("Standard Kompas.id fetch limited. Trying with Lightpanda browser...\n")
 		return ReadURLWithLightpanda(urlStr)
 	}
 
@@ -57,6 +74,13 @@ func ReadURL(urlStr string) (*Article, error) {
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("Referer", "https://www.google.com/")
 
+	if strings.Contains(urlStr, "kompas.id") {
+		kompasCookies := os.Getenv("KOMPAS_COOKIES")
+		if kompasCookies != "" {
+			req.Header.Set("Cookie", kompasCookies)
+		}
+	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -76,6 +100,15 @@ func ReadURL(urlStr string) (*Article, error) {
 }
 
 func extractContent(doc *goquery.Document, isArchive bool) (*Article, error) {
+	// Kompas.id paywall bypass: remove blockers and hidden classes
+	doc.Find(".paywall, #paywall-wrapper, .subscription-wrapper, .subscription-banner").Each(func(i int, s *goquery.Selection) {
+		s.Remove()
+	})
+	// Remove blur and other styles that hide content
+	doc.Find("[style*='filter: blur']").Each(func(i int, s *goquery.Selection) {
+		s.SetAttr("style", "")
+	})
+
 	title := strings.TrimSpace(doc.Find("title").Text())
 	var lines []string
 
@@ -132,7 +165,16 @@ func ReadURLWithLightpanda(urlStr string) (*Article, error) {
 		return nil, err
 	}
 
-	cmd := exec.Command(lightpandaPath, "fetch", "--dump", "html", "--strip_mode", "js,css", urlStr)
+	// For Kompas.id, try to use stored cookies if available
+	cookies := os.Getenv("KOMPAS_COOKIES")
+	args := []string{"fetch", "--dump", "html", "--strip_mode", "js,css"}
+	if cookies != "" && strings.Contains(urlStr, "kompas.id") {
+		// Note: Lightpanda 'fetch' doesn't have a direct --cookie flag in help, 
+		// but if it supports custom headers we could use it. 
+		// Since it doesn't seem to, we'll rely on our smart reader to use them via http client.
+	}
+
+	cmd := exec.Command(lightpandaPath, append(args, urlStr)...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -152,12 +194,21 @@ func ReadURLWithLightpanda(urlStr string) (*Article, error) {
 }
 
 func fetchPasalContent(urlStr string) (*Article, error) {
-	parts := strings.Split(urlStr, "pasal.id")
-	if len(parts) < 2 {
-		return nil, fmt.Errorf("invalid pasal.id URL")
+	var apiURL string
+	if strings.Contains(urlStr, "/akn/id/act/") {
+		parts := strings.Split(urlStr, "pasal.id")
+		if len(parts) < 2 {
+			return nil, fmt.Errorf("invalid pasal.id URL")
+		}
+		uri := strings.Split(parts[1], "#")[0]
+		apiURL = "https://pasal.id/api/v1/laws" + uri
+	} else if strings.Contains(urlStr, "/peraturan/") {
+		// Slugs are not directly supported by /laws/{uri} API yet, 
+		// so we let the web scraper handled it for better structure.
+		return nil, fmt.Errorf("redirect to web scraper for slug")
+	} else {
+		return nil, fmt.Errorf("unknown pasal.id format")
 	}
-	uri := strings.Split(parts[1], "#")[0]
-	apiURL := "https://pasal.id/api/v1/laws" + uri
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Get(apiURL)

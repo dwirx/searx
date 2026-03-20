@@ -5,13 +5,19 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
+	"runtime"
 	"searx-cli/internal/engine"
 	"searx-cli/internal/reader"
 	"searx-cli/internal/ui"
 	"searx-cli/internal/util"
 	"strings"
+	"time"
+
+	"github.com/joho/godotenv"
 )
 
 var version = "dev"
@@ -67,13 +73,20 @@ func buildEngine(name, searxInstance, hnCategory, polyCat string, rssFeeds map[s
 	case "hn":
 		return &engine.HackerNewsEngine{Category: hnCategory}, true
 	case "searx":
-		return &engine.SearxEngine{InstanceURL: searxInstance}, true
+		if searxInstance != "" {
+			return &engine.SearxEngine{InstanceURL: searxInstance}, true
+		}
+		return &engine.SearxEngine{InstanceURL: "https://searx.be"}, true
 	case "polymarket":
 		return &engine.PolymarketEngine{Category: polyCat, ShowX: true}, true
 	case "rss":
 		return &engine.RSSEngine{Feeds: rssFeeds, FilterSource: rssSource}, true
 	case "pasal":
 		return &engine.PasalEngine{LawType: lawType, LawYear: lawYear, LawStatus: lawStatus}, true
+	case "exa":
+		return &engine.ExaEngine{}, true
+	case "fire":
+		return &engine.FirecrawlEngine{}, true
 	default:
 		return nil, false
 	}
@@ -158,13 +171,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  setup         Download and install the latest Lightpanda browser\n")
 		fmt.Fprintf(os.Stderr, "  check-rss     Validate and remove broken subscribed RSS feeds\n")
 		fmt.Fprintf(os.Stderr, "  list-rss      Show all currently subscribed RSS feeds\n")
+		fmt.Fprintf(os.Stderr, "  epaper        Access Kompas.id ePaper archive (list, download YYYY-MM-DD)\n")
 		fmt.Fprintf(os.Stderr, "  update        Update Search CLI and check Lightpanda update status\n")
 		fmt.Fprintf(os.Stderr, "  uninstall     Uninstall Search CLI from current system\n")
 		fmt.Fprintf(os.Stderr, "  version       Show Search CLI and Lightpanda versions\n")
 		fmt.Fprintf(os.Stderr, "  --version     Show Search CLI version only\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
-		fmt.Fprintf(os.Stderr, "  -e <engine>   Search engine: ddg, google, brave, mojeek, hn, searx, polymarket, rss, pasal\n")
+		fmt.Fprintf(os.Stderr, "  -e <engine>   Search engine: ddg, google, brave, mojeek, hn, searx, polymarket, rss, pasal, exa, fire\n")
 		fmt.Fprintf(os.Stderr, "  -market       Shortcut for Polymarket (use -cat for specific topic)\n")
+		fmt.Fprintf(os.Stderr, "  -exa          Shortcut for Exa Neural Search\n")
+		fmt.Fprintf(os.Stderr, "  -fire         Shortcut for Firecrawl Search\n")
 		fmt.Fprintf(os.Stderr, "  -pasal        Shortcut for Indonesian Laws (pasal.id)\n")
 		fmt.Fprintf(os.Stderr, "  -law-type <t> Filter Laws by type (UU, PP, PERPRES, etc.)\n")
 		fmt.Fprintf(os.Stderr, "  -law-year <y> Filter Laws by year (e.g. 2024)\n")
@@ -174,13 +190,23 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  -source <name> Specific RSS source: bloomberg, cnn, bbc, theverge, wired, etc.\n")
 		fmt.Fprintf(os.Stderr, "  -read <url>   Read full article content from the given URL\n")
 		fmt.Fprintf(os.Stderr, "  -save         Save the read article to a markdown file\n")
+		fmt.Fprintf(os.Stderr, "  -open         Open the first result in system browser\n")
 		fmt.Fprintf(os.Stderr, "  -panda        Force use of Lightpanda for reading\n")
 		fmt.Fprintf(os.Stderr, "  -archive      Use archive.today prefix for paywalls\n")
 		fmt.Fprintf(os.Stderr, "  -hn <cat>     Hacker News category: top, new, best, ask, show, job\n")
+		fmt.Fprintf(os.Stderr, "  -exa-type <t> Exa search type: neural, keyword (default: neural)\n")
+		fmt.Fprintf(os.Stderr, "  -exa-cat <c>  Exa category: company, research paper, news, linkedin profile, personal site, etc.\n")
+		fmt.Fprintf(os.Stderr, "  -exa-include <s> Include domains (comma separated)\n")
+		fmt.Fprintf(os.Stderr, "  -exa-exclude <s> Exclude domains (comma separated)\n")
+		fmt.Fprintf(os.Stderr, "  -exa-start <d> Start published date (YYYY-MM-DD)\n")
+		fmt.Fprintf(os.Stderr, "  -exa-end <d>   End published date (YYYY-MM-DD)\n")
 		fmt.Fprintf(os.Stderr, "  -lightpanda-only  With `update`, only check/update Lightpanda\n")
 		fmt.Fprintf(os.Stderr, "  -keep-lightpanda  With `uninstall`, keep Lightpanda files\n\n")
 		fmt.Fprintf(os.Stderr, "Examples:\n")
 		fmt.Fprintf(os.Stderr, "  search \"golang news\"\n")
+		fmt.Fprintf(os.Stderr, "  search -exa \"best AI models\" -exa-cat news\n")
+		fmt.Fprintf(os.Stderr, "  search -fire \"golang tutorials\" -fire-limit 10\n")
+		fmt.Fprintf(os.Stderr, "  search -exa \"golang\" -open\n")
 		fmt.Fprintf(os.Stderr, "  search -e hn -hn best\n")
 		fmt.Fprintf(os.Stderr, "  search -read \"https://...\" -save\n")
 		fmt.Fprintf(os.Stderr, "  search update\n")
@@ -191,6 +217,8 @@ func main() {
 	instanceFlag := flag.String("i", "", "Searx instance URL (only for -e searx)")
 	hnCatFlag := flag.String("hn", "top", "HN category: top, new, best, ask, show, job")
 	marketFlag := flag.Bool("market", false, "Polymarket shortcut")
+	exaFlag := flag.Bool("exa", false, "Exa shortcut")
+	fireFlag := flag.Bool("fire", false, "Firecrawl shortcut")
 	catFlag := flag.String("cat", "", "Category for Polymarket (politics, crypto, sports, etc.)")
 	rssFlag := flag.Bool("rss", false, "Read subscribed RSS feeds")
 	sourceFlag := flag.String("source", "", "Specific RSS source name to read (e.g. bloomberg, cnn)")
@@ -200,13 +228,27 @@ func main() {
 	lawTypeFlag := flag.String("law-type", "", "Filter Indonesian laws by type (UU, PP, PERPRES, etc.)")
 	lawYearFlag := flag.String("law-year", "", "Filter Indonesian laws by year")
 	lawStatusFlag := flag.String("law-status", "", "Filter Indonesian laws by status (berlaku, dicabut, diubah)")
+	exaTypeFlag := flag.String("exa-type", "neural", "Exa search type (neural, keyword)")
+	exaCatFlag := flag.String("exa-cat", "", "Exa category")
+	exaIncludeFlag := flag.String("exa-include", "", "Exa include domains (comma separated)")
+	exaExcludeFlag := flag.String("exa-exclude", "", "Exa exclude domains (comma separated)")
+	exaStartFlag := flag.String("exa-start", "", "Exa start date (YYYY-MM-DD)")
+	exaEndFlag := flag.String("exa-end", "", "Exa end date (YYYY-MM-DD)")
+	fireLimitFlag := flag.Int("fire-limit", 5, "Firecrawl search limit")
+	fireLangFlag := flag.String("fire-lang", "", "Firecrawl language (e.g. en, fr)")
+	fireCountryFlag := flag.String("fire-country", "", "Firecrawl country code (e.g. US, DE)")
+	fireLocFlag := flag.String("fire-loc", "", "Firecrawl location (e.g. 'Germany')")
+	fireTbsFlag := flag.String("fire-tbs", "", "Firecrawl time-based search (e.g. qdr:d)")
+	fireScrapeFlag := flag.Bool("fire-scrape", false, "Enable full page scraping (markdown)")
 	readURL := flag.String("read", "", "URL to read article content from")
 	archiveFlag := flag.Bool("archive", false, "Use archive.today to read the URL (for paywalls)")
 	pandaFlag := flag.Bool("panda", false, "Use lightpanda headless browser for reading")
 	saveFlag := flag.Bool("save", false, "Save the read article to a markdown file")
+	openFlag := flag.Bool("open", false, "Open first result in system browser")
 	versionFlag := flag.Bool("version", false, "Show Search CLI version")
 	flag.Parse()
 
+	_ = godotenv.Load()
 	cfg, _ := util.LoadConfig()
 
 	if *addRSSFlag != "" {
@@ -244,6 +286,14 @@ func main() {
 
 	if *marketFlag {
 		*engineFlag = "polymarket"
+	}
+
+	if *exaFlag {
+		*engineFlag = "exa"
+	}
+
+	if *fireFlag {
+		*engineFlag = "fire"
 	}
 
 	if *pasalFlag {
@@ -343,6 +393,9 @@ func main() {
 			fmt.Printf("Search CLI: %s\n", version)
 			fmt.Printf("Lightpanda: %s\n", util.GetLocalLightpandaVersion())
 			return
+		case "epaper":
+			runEpaperCommand(flag.Args()[1:])
+			return
 		}
 	}
 
@@ -438,6 +491,37 @@ func main() {
 		searchEngine = &engine.RSSEngine{Feeds: cfg.RSSFeeds, FilterSource: *sourceFlag}
 	case "pasal":
 		searchEngine = &engine.PasalEngine{LawType: *lawTypeFlag, LawYear: *lawYearFlag, LawStatus: *lawStatusFlag}
+	case "exa":
+		includeDomains := []string{}
+		if *exaIncludeFlag != "" {
+			includeDomains = strings.Split(*exaIncludeFlag, ",")
+		}
+		excludeDomains := []string{}
+		if *exaExcludeFlag != "" {
+			excludeDomains = strings.Split(*exaExcludeFlag, ",")
+		}
+		searchEngine = &engine.ExaEngine{
+			Type:               *exaTypeFlag,
+			Category:           *exaCatFlag,
+			IncludeDomains:     includeDomains,
+			ExcludeDomains:     excludeDomains,
+			StartPublishedDate: *exaStartFlag,
+			EndPublishedDate:   *exaEndFlag,
+			UseAutoprompt:      true,
+		}
+	case "fire":
+		scrapeFormats := []string{}
+		if *fireScrapeFlag {
+			scrapeFormats = []string{"markdown"}
+		}
+		searchEngine = &engine.FirecrawlEngine{
+			Limit:         *fireLimitFlag,
+			Lang:          *fireLangFlag,
+			Country:       *fireCountryFlag,
+			Location:      *fireLocFlag,
+			Tbs:           *fireTbsFlag,
+			ScrapeFormats: scrapeFormats,
+		}
 	default:
 		fmt.Printf("Unknown engine: %s\n", *engineFlag)
 		os.Exit(1)
@@ -497,6 +581,24 @@ func main() {
 		}
 	}
 	ui.PrintResults(searchEngine.Name(), qDisplay, results)
+
+	if *openFlag && len(results) > 0 {
+		url := results[0].URL
+		fmt.Printf("\nOpening first result: %s\n", url)
+		var cmd *exec.Cmd
+		switch runtime.GOOS {
+		case "linux":
+			cmd = exec.Command("xdg-open", url)
+		case "darwin":
+			cmd = exec.Command("open", url)
+		case "windows":
+			cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+		default:
+			fmt.Printf("Cannot open browser on %s automatically.\n", runtime.GOOS)
+			return
+		}
+		_ = cmd.Run()
+	}
 }
 
 func sanitizeFilename(s string) string {
@@ -513,4 +615,166 @@ func sanitizeFilename(s string) string {
 		res = strings.ReplaceAll(res, "--", "-")
 	}
 	return strings.Trim(res, "-")
+}
+
+func runEpaperCommand(args []string) {
+	if len(args) == 0 {
+		fmt.Println("Usage: search epaper <command> [args]")
+		fmt.Println("Commands: list, read <date>, download <date (YYYY-MM-DD)>")
+		return
+	}
+
+	command := args[0]
+	cookies := os.Getenv("KOMPAS_COOKIES")
+	if cookies == "" {
+		fmt.Println("Error: KOMPAS_COOKIES not set in .env. Please login to kompas.id in Firefox first.")
+		return
+	}
+
+	// Helper to extract tokens from Kompas pages
+	extractTokens := func(body string) (accessToken, refreshToken string) {
+		// Try header notification component first
+		atMatch := regexp.MustCompile(`accesstoken="([^"]+)"`).FindStringSubmatch(body)
+		if len(atMatch) > 1 { accessToken = atMatch[1] }
+		rtMatch := regexp.MustCompile(`refreshtoken="([^"]+)"`).FindStringSubmatch(body)
+		if len(rtMatch) > 1 { refreshToken = rtMatch[1] }
+		
+		// Fallback to Nuxt state JSON
+		if accessToken == "" {
+			atMatch = regexp.MustCompile(`access_token\s*[:=]\s*["']([^"']+)["']`).FindStringSubmatch(body)
+			if len(atMatch) > 1 { accessToken = atMatch[1] }
+		}
+		return
+	}
+
+	client := &http.Client{Timeout: 300 * time.Second}
+
+	if command == "list" {
+		fmt.Println("Fetching epaper list...")
+		req, _ := http.NewRequest("GET", "https://reader.kompas.id/arsip-kompas-30-hari-terakhir", nil)
+		req.Header.Set("Cookie", cookies)
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+		resp, err := client.Do(req)
+		if err != nil { fmt.Printf("Error: %v\n", err); return }
+		defer resp.Body.Close()
+		
+		body, _ := io.ReadAll(resp.Body)
+		bodyStr := string(body)
+		
+		re := regexp.MustCompile(`(\d{4}-\d{2}-\d{2})`)
+		matches := re.FindAllStringSubmatch(bodyStr, -1)
+		
+		if len(matches) == 0 {
+			fmt.Println("No editions found. Your cookies might have expired or don't have active subscription.")
+			return
+		}
+		
+		fmt.Println("Available ePaper editions (last 30 days):")
+		seen := make(map[string]bool)
+		for _, m := range matches {
+			if !seen[m[1]] {
+				fmt.Printf("- %s\n", m[1])
+				seen[m[1]] = true
+			}
+		}
+	} else if command == "read" {
+		if len(args) < 2 { fmt.Println("Error: Date required (YYYYMMDD or YYYY-MM-DD)"); return }
+		date := strings.ReplaceAll(args[1], "-", "")
+		fmt.Printf("Fetching info for ePaper %s...\n", date)
+		
+		url := fmt.Sprintf("https://reader.kompas.id/pdf/show/%s", date)
+		req, _ := http.NewRequest("GET", url, nil)
+		req.Header.Set("Cookie", cookies)
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+		resp, err := client.Do(req)
+		if err != nil { fmt.Printf("Error: %v\n", err); return }
+		defer resp.Body.Close()
+		
+		body, _ := io.ReadAll(resp.Body)
+		bodyStr := string(body)
+		
+		titleMatch := regexp.MustCompile(`title\s*[:=]\s*["']([^"']+)["']`).FindStringSubmatch(bodyStr)
+		if len(titleMatch) > 1 {
+			fmt.Printf("\nEDITION: %s\n", titleMatch[1])
+		}
+		
+		pdfMatch := regexp.MustCompile(`encrypted\s*[:=]\s*["']([^"']+)["']`).FindStringSubmatch(bodyStr)
+		if len(pdfMatch) > 1 {
+			fmt.Printf("PDF URL: %s\n", strings.ReplaceAll(pdfMatch[1], `\u002F`, "/"))
+		} else {
+			fmt.Println("Could not find encrypted PDF URL. Are you logged in?")
+		}
+	} else if command == "download" {
+		if len(args) < 2 { fmt.Println("Error: Date required (YYYY-MM-DD)"); return }
+		date := args[1]
+		cleanDate := strings.ReplaceAll(date, "-", "")
+		fmt.Printf("Downloading ePaper for %s...\n", date)
+		
+		// 1. Get Access Token
+		req, _ := http.NewRequest("GET", "https://reader.kompas.id/arsip-kompas-30-hari-terakhir", nil)
+		req.Header.Set("Cookie", cookies)
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+		resp, err := client.Do(req)
+		if err != nil { fmt.Printf("Error: %v\n", err); return }
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		
+		at, _ := extractTokens(string(body))
+		if at == "" { fmt.Println("Warning: Access token not found, download might fail."); }
+
+		// 2. Download
+		downloadURL := fmt.Sprintf("https://epaper-dasbor.kompas.id/api/v1/epaper/download/pdf?date=%s", date)
+		req, _ = http.NewRequest("GET", downloadURL, nil)
+		req.Header.Set("Cookie", cookies)
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+		if at != "" {
+			req.Header.Set("Authorization", "Bearer "+at)
+		}
+		
+		resp, err = client.Do(req)
+		if err != nil { fmt.Printf("Download failed: %v\n", err); return }
+		defer resp.Body.Close()
+		
+		if resp.StatusCode != http.StatusOK {
+			// Try extracting encrypted URL from the show page
+			fmt.Println("Standard API blocked. Trying direct encrypted URL...")
+			url := fmt.Sprintf("https://reader.kompas.id/pdf/show/%s", cleanDate)
+			req, _ = http.NewRequest("GET", url, nil)
+			req.Header.Set("Cookie", cookies)
+			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+			resp2, err := client.Do(req)
+			if err == nil {
+				defer resp2.Body.Close()
+				b, _ := io.ReadAll(resp2.Body)
+				pdfMatch := regexp.MustCompile(`encrypted\s*[:=]\s*["']([^"']+)["']`).FindStringSubmatch(string(b))
+				if len(pdfMatch) > 1 {
+					finalPDFURL := strings.ReplaceAll(pdfMatch[1], `\u002F`, "/")
+					req, _ = http.NewRequest("GET", finalPDFURL, nil)
+					req.Header.Set("Cookie", cookies)
+					resp, err = client.Do(req)
+					if err != nil || resp.StatusCode != http.StatusOK {
+						fmt.Printf("Direct download failed: %v (status %d)\n", err, resp.StatusCode)
+						return
+					}
+				} else {
+					fmt.Printf("Download failed: status %d and no encrypted URL found.\n", resp.StatusCode)
+					return
+				}
+			} else {
+				fmt.Printf("Download failed: status %d\n", resp.StatusCode)
+				return
+			}
+		}
+		
+		filename := fmt.Sprintf("kompas-%s.pdf", date)
+		out, _ := os.Create(filename)
+		defer out.Close()
+		
+		_, err = io.Copy(out, resp.Body)
+		if err != nil {
+			fmt.Printf("Error saving file: %v\n", err)
+		} else {
+			fmt.Printf("[✔] ePaper saved to: %s\n", filename)
+		}
+	}
 }

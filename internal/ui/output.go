@@ -67,6 +67,14 @@ func PrintResults(engineName string, query string, results []types.Result) {
 		PrintPasalResults(engineName, query, results)
 		return
 	}
+	if strings.Contains(strings.ToLower(engineName), "exa") {
+		PrintExaResults(engineName, query, results)
+		return
+	}
+	if strings.Contains(strings.ToLower(engineName), "firecrawl") {
+		PrintFirecrawlResults(engineName, query, results)
+		return
+	}
 
 	fmt.Printf("\nResults for: %s (via %s)\n", query, engineName)
 	fmt.Println(strings.Repeat("=", 60))
@@ -241,5 +249,80 @@ func PrintPasalResults(engineName string, query string, results []types.Result) 
 			}
 		}
 		fmt.Printf("   %s🔗 %s%s\n\n", colorCyan, res.URL, colorReset)
+	}
+}
+
+func PrintExaResults(engineName string, query string, results []types.Result) {
+	fmt.Printf("\n%s🚀 %s %s (via %s)\n", colorBold, query, colorReset, engineName)
+	fmt.Println(strings.Repeat("━", 60))
+	
+	if len(results) == 0 {
+		fmt.Println("No results found in Exa's neural network.")
+		return
+	}
+
+	for i, res := range results {
+		title := res.Title
+		fmt.Printf("%s%d.%s %s\n", colorBold, i+1, colorReset, colorBold+title+colorReset)
+		
+		snippet := res.Snippet
+		meta := ""
+		highlights := ""
+		
+		if strings.Contains(snippet, " | ") {
+			parts := strings.SplitN(snippet, " | ", 2)
+			meta = parts[0]
+			highlights = parts[1]
+		} else {
+			highlights = snippet
+		}
+
+		if meta != "" {
+			fmt.Printf("   %s%s%s\n", colorCyan, meta, colorReset)
+		}
+
+		if highlights != "" {
+			lines := strings.Split(highlights, "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == "" { continue }
+				if len(line) > 150 {
+					line = line[:147] + "..."
+				}
+				fmt.Printf("   %s%s%s\n", colorWhite, line, colorReset)
+			}
+		}
+		
+		fmt.Printf("   %s🔗 %s%s%s\n\n", colorBlue, colorCyan, res.URL, colorReset)
+	}
+}
+
+func PrintFirecrawlResults(engineName string, query string, results []types.Result) {
+	fmt.Printf("\n%s🔥 %s %s (via %s)\n", colorBold, query, colorReset, engineName)
+	fmt.Println(strings.Repeat("━", 60))
+	
+	if len(results) == 0 {
+		fmt.Println("No results found in Firecrawl's web index.")
+		return
+	}
+
+	for i, res := range results {
+		title := res.Title
+		fmt.Printf("%s%d.%s %s\n", colorBold, i+1, colorReset, colorBold+title+colorReset)
+		
+		snippet := res.Snippet
+		if snippet != "" {
+			lines := strings.Split(snippet, "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == "" { continue }
+				if len(line) > 150 {
+					line = line[:147] + "..."
+				}
+				fmt.Printf("   %s%s%s\n", colorWhite, line, colorReset)
+			}
+		}
+		
+		fmt.Printf("   %s🔗 %s%s%s\n\n", colorBlue, colorCyan, res.URL, colorReset)
 	}
 }
