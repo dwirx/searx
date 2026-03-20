@@ -89,6 +89,8 @@ func buildEngine(name, searxInstance, hnCategory, polyCat string, rssFeeds map[s
 		return &engine.FirecrawlEngine{}, true
 	case "you":
 		return &engine.YouEngine{}, true
+	case "god":
+		return &engine.GodEngine{}, true
 	default:
 		return nil, false
 	}
@@ -179,11 +181,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  version       Show Search CLI and Lightpanda versions\n")
 		fmt.Fprintf(os.Stderr, "  --version     Show Search CLI version only\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
-		fmt.Fprintf(os.Stderr, "  -e <engine>   Search engine: ddg, google, brave, mojeek, hn, searx, polymarket, rss, pasal, exa, fire, you\n")
+		fmt.Fprintf(os.Stderr, "  -e <engine>   Search engine: ddg, google, brave, mojeek, hn, searx, polymarket, rss, pasal, exa, fire, you, god\n")
 		fmt.Fprintf(os.Stderr, "  -market       Shortcut for Polymarket (use -cat for specific topic)\n")
 		fmt.Fprintf(os.Stderr, "  -exa          Shortcut for Exa Neural Search\n")
 		fmt.Fprintf(os.Stderr, "  -fire         Shortcut for Firecrawl Search\n")
 		fmt.Fprintf(os.Stderr, "  -you          Shortcut for You.com Search\n")
+		fmt.Fprintf(os.Stderr, "  -god          Shortcut for God Mode (Multi-Engine Anti-Bot)\n")
 		fmt.Fprintf(os.Stderr, "  -you-mode <m> You.com mode: search, research, contents (default: search)\n")
 		fmt.Fprintf(os.Stderr, "  -pasal        Shortcut for Indonesian Laws (pasal.id)\n")
 		fmt.Fprintf(os.Stderr, "  -law-type <t> Filter Laws by type (UU, PP, PERPRES, etc.)\n")
@@ -224,6 +227,7 @@ func main() {
 	exaFlag := flag.Bool("exa", false, "Exa shortcut")
 	fireFlag := flag.Bool("fire", false, "Firecrawl shortcut")
 	youFlag := flag.Bool("you", false, "You.com shortcut")
+	godFlag := flag.Bool("god", false, "God Mode shortcut (Multi-Engine Anti-Bot)")
 	catFlag := flag.String("cat", "", "Category for Polymarket (politics, crypto, sports, etc.)")
 	rssFlag := flag.Bool("rss", false, "Read subscribed RSS feeds")
 	sourceFlag := flag.String("source", "", "Specific RSS source name to read (e.g. bloomberg, cnn)")
@@ -307,6 +311,10 @@ func main() {
 
 	if *youFlag {
 		*engineFlag = "you"
+	}
+
+	if *godFlag {
+		*engineFlag = "god"
 	}
 
 	if *pasalFlag {
@@ -542,6 +550,8 @@ func main() {
 			Language: *youLangFlag,
 			Mode:     *youModeFlag,
 		}
+	case "god":
+		searchEngine = &engine.GodEngine{}
 	default:
 		fmt.Printf("Unknown engine: %s\n", *engineFlag)
 		os.Exit(1)
