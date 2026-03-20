@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"searx-cli/internal/types"
 	"time"
 )
 
@@ -24,7 +25,7 @@ func (s *SearxEngine) Name() string {
 	return "Searx (" + s.InstanceURL + ")"
 }
 
-func (s *SearxEngine) Search(query string) ([]Result, error) {
+func (s *SearxEngine) Search(query string) ([]types.Result, error) {
 	u, err := url.Parse(s.InstanceURL + "/search")
 	if err != nil {
 		return nil, err
@@ -59,9 +60,9 @@ func (s *SearxEngine) Search(query string) ([]Result, error) {
 		return nil, err
 	}
 
-	results := make([]Result, 0, len(data.Results))
+	results := make([]types.Result, 0, len(data.Results))
 	for _, r := range data.Results {
-		results = append(results, Result{
+		results = append(results, types.Result{
 			Title:   r.Title,
 			URL:     r.URL,
 			Snippet: r.Content,

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"searx-cli/internal/types"
 	"strings"
 	"time"
 
@@ -13,10 +14,10 @@ import (
 type BraveEngine struct{}
 
 func (b *BraveEngine) Name() string {
-	return "Brave"
+	return "Brave Search"
 }
 
-func (b *BraveEngine) Search(query string) ([]Result, error) {
+func (b *BraveEngine) Search(query string) ([]types.Result, error) {
 	u, _ := url.Parse("https://search.brave.com/search")
 	q := u.Query()
 	q.Set("q", query)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"searx-cli/internal/types"
 	"strings"
 	"time"
 
@@ -16,7 +17,7 @@ func (g *GoogleEngine) Name() string {
 	return "Google"
 }
 
-func (g *GoogleEngine) Search(query string) ([]Result, error) {
+func (g *GoogleEngine) Search(query string) ([]types.Result, error) {
 	// Using more robust URL and params
 	u, _ := url.Parse("https://www.google.com/search")
 	q := u.Query()

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"searx-cli/internal/types"
 	"strings"
 	"time"
 
@@ -16,7 +17,7 @@ func (m *MojeekEngine) Name() string {
 	return "Mojeek"
 }
 
-func (m *MojeekEngine) Search(query string) ([]Result, error) {
+func (m *MojeekEngine) Search(query string) ([]types.Result, error) {
 	u, _ := url.Parse("https://www.mojeek.com/search")
 	q := u.Query()
 	q.Set("q", query)

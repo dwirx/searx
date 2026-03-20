@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"searx-cli/internal/types"
 	"strings"
 	"time"
 
@@ -16,7 +17,7 @@ func (d *DuckDuckGoEngine) Name() string {
 	return "DuckDuckGo (Scraper)"
 }
 
-func (d *DuckDuckGoEngine) Search(query string) ([]Result, error) {
+func (d *DuckDuckGoEngine) Search(query string) ([]types.Result, error) {
 	u, _ := url.Parse("https://html.duckduckgo.com/html/")
 	q := u.Query()
 	q.Set("q", query)

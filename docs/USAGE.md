@@ -1,120 +1,77 @@
-# Usage Guide
+# USAGE Guide
 
-## Check Version
-
+## 🔍 Search
+Search using the default engine (DuckDuckGo):
 ```bash
-search --version
-search version
+search "your query"
 ```
 
-`search version` shows both CLI and Lightpanda versions.
-
-## Search Web Results
-
-Default engine:
-
+Use a specific engine:
 ```bash
-search "golang generics"
+search -e google "your query"
+search -e mojeek "your query"
 ```
 
-Default engine is `ddg`. If blocked (`202/403/429`), CLI automatically tries fallback engines.
+## 📊 Polymarket (Real-time Markets)
+Polymarket features real-time price tracking with color-coded 24h changes.
 
-Select engine:
-
+**Shortcut:**
 ```bash
-search -e ddg "linux kernel scheduler"
-search -e brave "zero trust architecture"
-search -e google "go 1.25 release notes"
-search -e mojeek "privacy search engine"
+search -market
 ```
 
-Searx with custom instance:
-
+**Specific Category:**
 ```bash
-search -e searx -i https://searx.be "open source intelligence"
+search -market -cat crypto
+search -market -cat politics
+search -market -cat sports
+```
+Supported categories: `trending`, `breaking`, `new`, `politics`, `crypto`, `sports`, `finance`, `geopolitics`, `tech`, `culture`, `weather`.
+
+## 📰 RSS Feeds
+Manage and read your favorite news feeds directly from the CLI.
+
+**Configuration File:**
+Your feeds are stored in YAML format at:
+`~/.local/share/searx/rss.yaml`
+
+**Read all feeds:**
+```bash
+search -rss
 ```
 
-## Hacker News Mode
-
+**Search within feeds:**
 ```bash
-search -e hn -hn top
-search -e hn -hn best
-search -e hn -hn ask
+search -rss "technology"
 ```
 
-Supported HN categories: `top`, `new`, `best`, `ask`, `show`, `job`.
-
-## Read and Save Articles
-
-Read article content:
-
+**Manage feeds:**
 ```bash
-search -read "https://go.dev/blog/go1.22"
+search -add-rss techcrunch=https://techcrunch.com/feed/
+search -del-rss bbc
+search list-rss
+search check-rss
 ```
 
-Read and save to Markdown:
+## 📖 Reader Mode
+Extract clean, distraction-free content from any URL.
 
+**Read article:**
 ```bash
-search -read "https://www.nytimes.com/2026/03/17/world/middleeast/iran-war-israel-middle-east-recap.html" -save
+search -read "https://example.com/article"
 ```
 
-Force Lightpanda:
-
+**Read and save to Markdown:**
 ```bash
-search -read "https://example.com/article" -panda -save
+search -read "https://example.com/article" -save
 ```
 
-Force archive.today prefix:
-
+**Force paywall bypass (Archive.today):**
 ```bash
-search -read "https://example.com/article" -archive -save
+search -read "https://nytimes.com/..." -archive
 ```
 
-## Lightpanda Management
-
-```bash
-search setup   # install/check/update to latest if needed
-```
-
-## Update and Uninstall
-
-Update app + Lightpanda:
-
-```bash
-search update
-```
-
-Update Lightpanda only:
-
-```bash
-search update --lightpanda-only
-```
-
-Uninstall app + Lightpanda:
-
-```bash
-search uninstall
-```
-
-Uninstall app only (keep Lightpanda):
-
-```bash
-search uninstall --keep-lightpanda
-```
-
-Notes:
-- `search update` skips binary download when installed CLI is already the latest release.
-- Lightpanda update also skips download when already on the latest detected version.
-
-Equivalent installer script commands:
-
-```bash
-curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --update
-curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --uninstall
-```
-
-## Output Files
-
-When `-save` is used, output is written to the current directory as:
-
-`<sanitized-title>.md`
+## 🛠 Commands
+- `search setup`: Install Lightpanda browser (Linux).
+- `search update`: Update Search CLI and Lightpanda.
+- `search version`: Show versions.

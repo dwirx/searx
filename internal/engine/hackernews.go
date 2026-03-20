@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"searx-cli/internal/types"
 	"sync"
 	"time"
 )
@@ -26,7 +27,7 @@ func (h *HackerNewsEngine) Name() string {
 	return "Hacker News API (" + h.Category + ")"
 }
 
-func (h *HackerNewsEngine) Search(query string) ([]Result, error) {
+func (h *HackerNewsEngine) Search(query string) ([]types.Result, error) {
 	var endpoint string
 	switch h.Category {
 	case "new", "newest":
@@ -63,7 +64,7 @@ func (h *HackerNewsEngine) Search(query string) ([]Result, error) {
 	}
 
 	// 2. Fetch item details in parallel
-	results := make([]Result, len(ids))
+	results := make([]types.Result, len(ids))
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(ids))
 
@@ -83,7 +84,7 @@ func (h *HackerNewsEngine) Search(query string) ([]Result, error) {
 			}
 
 			snippet := fmt.Sprintf("%d points by %s | %d comments", item.Score, item.By, item.Descendants)
-			results[i] = Result{
+			results[i] = types.Result{
 				Title:   item.Title,
 				URL:     url,
 				Snippet: snippet,
@@ -95,7 +96,7 @@ func (h *HackerNewsEngine) Search(query string) ([]Result, error) {
 	close(errChan)
 
 	// Filter out empty results in case of partial failures
-	var finalResults []Result
+	var finalResults []types.Result
 	for _, r := range results {
 		if r.Title != "" {
 			finalResults = append(finalResults, r)

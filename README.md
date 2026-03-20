@@ -1,160 +1,113 @@
-# Multi-Engine Search & Reader CLI (Go)
+# 🚀 Multi-Engine Search & Info-Center CLI (Go)
 
-A powerful, modular, and distraction-free CLI search tool written in Go. Search across multiple engines, browse Hacker News, and read articles directly in your terminal with automatic paywall and bot-protection bypass.
+A powerful, modular, and distraction-free CLI tool written in Go. Search across multiple engines, track real-time prediction markets, manage RSS feeds, and read articles directly in your terminal with automatic paywall and bot-protection bypass.
 
-## 🚀 Features
+---
 
-- **Multi-Engine Search**: Support for DuckDuckGo, Mojeek, Google (Lite), Brave, and SearX.
-- **Official Hacker News API**: Browse `top`, `new`, `best`, `ask`, `show`, and `job` stories.
-- **Smart Reader**: Automatically extracts clean article content (distraction-free).
-- **Auto-Bypass**: 
-    - Intelligent fallbacks: Standard Fetch ➔ Lightpanda Browser ➔ Archive.today.
-    - Automatic paywall detection for NYT, WSJ, Bloomberg, etc.
-- **Headless Browser Integration**: Uses [Lightpanda](https://lightpanda.io/) for high-performance, stealthy web fetching.
-- **Save to Markdown**: Save extracted articles directly to `.md` files with sanitized filenames.
+## ✨ Features
+
+- **🔍 Multi-Engine Search**: Support for DuckDuckGo, Mojeek, Google, Brave, and SearX.
+- **📊 Real-time Markets**: Integration with **Polymarket** featuring color-coded price movements (↑/↓) and categorical filtering.
+- **📰 RSS Reader**: Full-featured RSS/Atom manager with global search, source filtering, and automated feed validation.
+- **📖 Smart Reader Mode**: Automatically extracts clean, Markdown-like article content for a distraction-free reading experience.
+- **🛡️ Auto-Bypass**: Intelligent fallbacks using [Lightpanda](https://lightpanda.io/) (Headless Browser) and Archive.today to bypass paywalls (NYT, WSJ, Bloomberg, etc.).
+- **💾 Save to Markdown**: Save any extracted article directly to a `.md` file for your personal knowledge base.
+- **⏳ Visual Feedback**: Modern UI with loading spinners and ANSI colors for high terminal productivity.
+
+---
 
 ## 🛠 Installation
 
-Detailed docs:
-- `docs/INSTALL.md`
-- `docs/USAGE.md`
-
-### Quick Install
-Recommended install from GitHub Releases.
-
-**Linux and macOS**
+### ⚡ Quick Install (Linux & macOS)
 ```bash
 curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash
 ```
 
-After install:
-```bash
-search --version
-```
-
-Update from CLI (recommended after install):
-```bash
-search update
-```
-
-Update to latest release (installer script form):
-```bash
-curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --update
-```
-
-Uninstall from CLI:
-```bash
-search uninstall
-search uninstall --keep-lightpanda
-```
-
-Uninstall (installer script form):
-```bash
-curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash -s -- --uninstall
-```
-
-Custom install dir (optional):
-```bash
-SEARX_INSTALL_DIR="$HOME/bin" curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash
-```
-
-Skip setup / disable auto PATH update (optional):
-```bash
-SEARX_SKIP_SETUP=1 SEARX_AUTO_PATH=0 curl -sSL https://github.com/dwirx/searx/releases/latest/download/install.sh | bash
-```
-
-### Manual Install
-**Linux (x86_64 example):**
-```bash
-curl -fLO https://github.com/dwirx/searx/releases/latest/download/search-x86_64-linux
-chmod +x search-x86_64-linux
-sudo mv search-x86_64-linux /usr/local/bin/search
-search --version
-```
-
-**macOS Apple Silicon (aarch64 example):**
-```bash
-curl -fLO https://github.com/dwirx/searx/releases/latest/download/search-aarch64-darwin
-chmod +x search-aarch64-darwin
-sudo mv search-aarch64-darwin /usr/local/bin/search
-search --version
-```
-
-### 🛠 Build From Source
+### 🔨 Build From Source
 ```bash
 git clone https://github.com/dwirx/searx
 cd searx
 go build -o search ./cmd/search
-sudo mv search /usr/local/bin/  # Linux/macOS
+./search setup  # Install the Lightpanda helper
 ```
 
-Then run:
-```bash
-search -read "https://www.nytimes.com/2026/03/17/world/middleeast/iran-war-israel-middle-east-recap.html" -save
-```
+---
 
 ## 📖 Usage Guide
 
-Update / uninstall shortcuts:
+### 1. 🔍 Searching the Web
 ```bash
-search update                  # update CLI + check Lightpanda
-search update --lightpanda-only
-search uninstall
-search uninstall --keep-lightpanda
+search "golang concurrency patterns"          # Default (DuckDuckGo)
+search -e google "latest space news"          # Use Google
+search -e mojeek "privacy tools"              # Use Mojeek (fast & independent)
 ```
 
-### 1. Search
-Search using the default engine (DuckDuckGo):
+### 2. 📊 Polymarket (Prediction Markets)
+Track what the world thinks is going to happen in real-time.
 ```bash
-search "golang generics"
+search -market                       # View trending breaking news
+search -market -cat crypto           # Filter by Crypto
+search -market -cat politics         # Filter by Politics
 ```
-Search using Mojeek (very fast and reliable):
+*Supported categories: `trending`, `breaking`, `new`, `politics`, `crypto`, `sports`, `finance`, `geopolitics`, `tech`, `culture`, `weather`.*
+
+### 3. 📰 RSS Feed Manager
+Stay updated with your favorite news sources.
 ```bash
-search -e mojeek "linux kernel internals"
+search -rss                          # Read all subscribed feeds
+search -rss "artificial intelligence" # Search for "AI" across all feeds
+search -rss -source bloomberg        # Filter to only read Bloomberg
 ```
 
-### 2. Hacker News
-Browse the best stories currently on HN:
+**Manage your feeds:**
 ```bash
-search -e hn -hn best
+search -add-rss techcrunch=https://techcrunch.com/feed/  # Add new source
+search -del-rss bbc                                      # Remove source
+search list-rss                                          # View all subscriptions
+search check-rss                                         # Validate and cleanup broken feeds
+```
+*Configuration stored at: `~/.local/share/searx/rss.yaml`*
+
+### 4. 📖 Reader Mode (Bypass Paywalls)
+```bash
+search -read "https://www.nytimes.com/..."        # Extract and read
+search -read "https://go.dev/blog/..." -save      # Read and save to .md
 ```
 
-### 3. Read & Save Articles
-Read an article directly in the terminal:
-```bash
-search -read "https://go.dev/blog/go1.22"
-```
+---
 
-**Save the article** to a Markdown file automatically:
-```bash
-search -read "https://go.dev/blog/go1.22" -save
-```
-*Output: `[✔] Article saved to: go-122-is-released-the-go-programming-language.md`*
-
-**Bypass Paywalls (NYT, etc.)**:
-The tool will automatically try to use Archive.today and Lightpanda if it detects a known paywalled site.
-```bash
-search -read "https://www.nytimes.com/..." -save
-```
-
-## ⚙️ Options
+## ⚙️ Command Options
 
 | Flag | Description |
 |------|-------------|
-| `-e` | Search engine (`ddg`, `google`, `brave`, `mojeek`, `hn`, `searx`) |
-| `-read` | URL of the article to extract and read |
+| `-e <name>` | Select search engine (`ddg`, `google`, `brave`, `mojeek`, `hn`, `searx`, `polymarket`, `rss`) |
+| `-market` | Shortcut for Polymarket markets |
+| `-cat <topic>` | Category for Polymarket (politics, crypto, etc.) |
+| `-rss` | Read subscribed RSS feeds |
+| `-source <name>` | Filter RSS results by source name |
+| `-read <url>` | Extract and read article content |
 | `-save` | Save the extracted content to a `.md` file |
 | `-panda` | Force use of Lightpanda headless browser |
 | `-archive` | Force use of `archive.today` prefix |
-| `-hn` | HN Category (`top`, `new`, `best`, `ask`, `show`, `job`) |
-| `-i` | Custom Searx instance URL |
-
-## 🏗 Modular Structure
-
-- `cmd/search/`: Main entry point and flag handling.
-- `internal/engine/`: Logic for different search engines.
-- `internal/reader/`: Smart fetching and content extraction.
-- `internal/ui/`: Formatting and CLI output.
+| `-hn <cat>` | Hacker News Category (`top`, `new`, `best`, `ask`, `show`, `job`) |
 
 ---
-*Created with focus on privacy, speed, and terminal productivity.*
+
+## 📂 Configuration
+Your RSS feeds are stored in a human-readable YAML file:
+📍 `~/.local/share/searx/rss.yaml`
+
+**Default feeds included:**
+Bloomberg, BBC, CNN, Reuters, The Verge, TechCrunch, Wired, Ars Technica, OpenAI, DeepMind, Al Jazeera, and more.
+
+---
+
+## 🏗 Modular Architecture
+- `cmd/search/`: Main CLI entry point.
+- `internal/engine/`: Search and data providers (RSS, Polymarket, Search Engines).
+- `internal/reader/`: Article extraction and paywall bypass logic.
+- `internal/ui/`: Modern terminal interface and formatting.
+- `internal/types/`: Common data structures.
+
+---
+*Created with focus on privacy, speed, and terminal productivity. Enjoy your distraction-free information stream!* 🌐✨

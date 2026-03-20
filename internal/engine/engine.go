@@ -1,12 +1,10 @@
 package engine
 
-type Result struct {
-	Title   string
-	URL     string
-	Snippet string
-}
+import "searx-cli/internal/types"
+
+type Result = types.Result
 
 type SearchEngine interface {
-	Search(query string) ([]Result, error)
+	Search(query string) ([]types.Result, error)
 	Name() string
 }

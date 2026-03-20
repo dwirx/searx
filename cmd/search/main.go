@@ -54,7 +54,7 @@ func fallbackEngineNames(primary string) []string {
 	}
 }
 
-func buildEngine(name, searxInstance, hnCategory string) (engine.SearchEngine, bool) {
+func buildEngine(name, searxInstance, hnCategory, polyCat string, rssFeeds map[string]string, rssSource string) (engine.SearchEngine, bool) {
 	switch strings.ToLower(name) {
 	case "google":
 		return &engine.GoogleEngine{}, true
@@ -68,6 +68,10 @@ func buildEngine(name, searxInstance, hnCategory string) (engine.SearchEngine, b
 		return &engine.HackerNewsEngine{Category: hnCategory}, true
 	case "searx":
 		return &engine.SearxEngine{InstanceURL: searxInstance}, true
+	case "polymarket":
+		return &engine.PolymarketEngine{Category: polyCat, ShowX: true}, true
+	case "rss":
+		return &engine.RSSEngine{Feeds: rssFeeds, FilterSource: rssSource}, true
 	default:
 		return nil, false
 	}
@@ -150,12 +154,18 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Usage: search [options] [query]\n\n")
 		fmt.Fprintf(os.Stderr, "Commands:\n")
 		fmt.Fprintf(os.Stderr, "  setup         Download and install the latest Lightpanda browser\n")
+		fmt.Fprintf(os.Stderr, "  check-rss     Validate and remove broken subscribed RSS feeds\n")
+		fmt.Fprintf(os.Stderr, "  list-rss      Show all currently subscribed RSS feeds\n")
 		fmt.Fprintf(os.Stderr, "  update        Update Search CLI and check Lightpanda update status\n")
 		fmt.Fprintf(os.Stderr, "  uninstall     Uninstall Search CLI from current system\n")
 		fmt.Fprintf(os.Stderr, "  version       Show Search CLI and Lightpanda versions\n")
 		fmt.Fprintf(os.Stderr, "  --version     Show Search CLI version only\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
-		fmt.Fprintf(os.Stderr, "  -e <engine>   Search engine: ddg, google, brave, mojeek, hn, searx\n")
+		fmt.Fprintf(os.Stderr, "  -e <engine>   Search engine: ddg, google, brave, mojeek, hn, searx, polymarket\n")
+		fmt.Fprintf(os.Stderr, "  -market       Shortcut for Polymarket (use -cat for specific topic)\n")
+		fmt.Fprintf(os.Stderr, "  -cat <topic>  Polymarket Category: trending, breaking, new, politics, crypto, sports, etc.\n")
+		fmt.Fprintf(os.Stderr, "  -rss          Read subscribed RSS feeds (use -source for specific feed)\n")
+		fmt.Fprintf(os.Stderr, "  -source <name> Specific RSS source: bloomberg, cnn, bbc, theverge, wired, etc.\n")
 		fmt.Fprintf(os.Stderr, "  -read <url>   Read full article content from the given URL\n")
 		fmt.Fprintf(os.Stderr, "  -save         Save the read article to a markdown file\n")
 		fmt.Fprintf(os.Stderr, "  -panda        Force use of Lightpanda for reading\n")
@@ -171,15 +181,60 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  search uninstall --keep-lightpanda\n")
 	}
 
-	engineFlag := flag.String("e", getDefaultEngine(), "Engine: ddg, google, brave, mojeek, hn, searx")
+	engineFlag := flag.String("e", getDefaultEngine(), "Engine: ddg, google, brave, mojeek, hn, searx, polymarket")
 	instanceFlag := flag.String("i", "", "Searx instance URL (only for -e searx)")
 	hnCatFlag := flag.String("hn", "top", "HN category: top, new, best, ask, show, job")
+	marketFlag := flag.Bool("market", false, "Polymarket shortcut")
+	catFlag := flag.String("cat", "", "Category for Polymarket (politics, crypto, sports, etc.)")
+	rssFlag := flag.Bool("rss", false, "Read subscribed RSS feeds")
+	sourceFlag := flag.String("source", "", "Specific RSS source name to read (e.g. bloomberg, cnn)")
+	addRSSFlag := flag.String("add-rss", "", "Add a new RSS feed (format: name=url)")
+	delRSSFlag := flag.String("del-rss", "", "Remove an RSS feed by name")
 	readURL := flag.String("read", "", "URL to read article content from")
 	archiveFlag := flag.Bool("archive", false, "Use archive.today to read the URL (for paywalls)")
 	pandaFlag := flag.Bool("panda", false, "Use lightpanda headless browser for reading")
 	saveFlag := flag.Bool("save", false, "Save the read article to a markdown file")
 	versionFlag := flag.Bool("version", false, "Show Search CLI version")
 	flag.Parse()
+
+	cfg, _ := util.LoadConfig()
+
+	if *addRSSFlag != "" {
+		parts := strings.SplitN(*addRSSFlag, "=", 2)
+		if len(parts) == 2 {
+			cfg.RSSFeeds[parts[0]] = parts[1]
+			if err := util.SaveConfig(cfg); err != nil {
+				fmt.Printf("Error saving config: %v\n", err)
+			} else {
+				fmt.Printf("Added RSS feed: %s -> %s\n", parts[0], parts[1])
+			}
+		} else {
+			fmt.Println("Invalid format. Use -add-rss name=url")
+		}
+		return
+	}
+
+	if *delRSSFlag != "" {
+		if _, ok := cfg.RSSFeeds[*delRSSFlag]; ok {
+			delete(cfg.RSSFeeds, *delRSSFlag)
+			if err := util.SaveConfig(cfg); err != nil {
+				fmt.Printf("Error saving config: %v\n", err)
+			} else {
+				fmt.Printf("Removed RSS feed: %s\n", *delRSSFlag)
+			}
+		} else {
+			fmt.Printf("RSS feed not found: %s\n", *delRSSFlag)
+		}
+		return
+	}
+
+	if *rssFlag {
+		*engineFlag = "rss"
+	}
+
+	if *marketFlag {
+		*engineFlag = "polymarket"
+	}
 
 	if *versionFlag {
 		fmt.Println(version)
@@ -194,6 +249,39 @@ func main() {
 				fmt.Printf("Error: %v\n", err)
 				os.Exit(1)
 			}
+			return
+		case "check-rss":
+			fmt.Println("Validating RSS feeds...")
+			rss := &engine.RSSEngine{Feeds: cfg.RSSFeeds}
+			broken := rss.Validate()
+			if len(broken) == 0 {
+				fmt.Println("[✔] All feeds are working perfectly.")
+				return
+			}
+
+			fmt.Printf("Found %d broken feeds:\n", len(broken))
+			for name, err := range broken {
+				fmt.Printf("- %s: %v\n", name, err)
+				delete(cfg.RSSFeeds, name)
+			}
+
+			if err := util.SaveConfig(cfg); err != nil {
+				fmt.Printf("Error saving updated config: %v\n", err)
+			} else {
+				fmt.Println("[✔] Removed broken feeds from configuration.")
+			}
+			return
+		case "list-rss":
+			fmt.Printf("\n%s📜 Subscribed RSS Feeds (%d)%s\n", "\033[1m", len(cfg.RSSFeeds), "\033[0m")
+			fmt.Println(strings.Repeat("━", 60))
+			if len(cfg.RSSFeeds) == 0 {
+				fmt.Println("No feeds subscribed yet. Use -add-rss to add some!")
+				return
+			}
+			for name, url := range cfg.RSSFeeds {
+				fmt.Printf("%s%-15s%s %s\n", "\033[35m", name, "\033[0m", url)
+			}
+			fmt.Println()
 			return
 		case "update":
 			opts, err := parseSubcommandOptions("update", flag.Args()[1:])
@@ -253,21 +341,24 @@ func main() {
 			finalURL = "https://archive.today/" + finalURL
 		}
 
+		s := ui.NewSpinner("Fetching and cleaning article content (via Lightpanda/SmartReader)...")
+		s.Start()
+
 		var article *reader.Article
 		var err error
 
 		if *pandaFlag {
-			fmt.Printf("Forcing Lightpanda for: %s...\n", finalURL)
 			article, err = reader.ReadURLWithLightpanda(finalURL)
 		} else {
 			article, err = reader.SmartRead(finalURL)
 			isPaywall := strings.Contains(finalURL, "nytimes.com") || strings.Contains(finalURL, "wsj.com") || strings.Contains(finalURL, "bloomberg.com")
 			if (err != nil || len(article.Content) < 100) && isPaywall && !*archiveFlag {
-				fmt.Println("\nDetected a paywalled site. Automatically retrying via archive.today...")
 				archiveURL := "https://archive.today/" + finalURL
 				article, err = reader.SmartRead(archiveURL)
 			}
 		}
+
+		s.Stop()
 
 		if err != nil {
 			fmt.Printf("\nError: All fetch methods failed: %v\n", err)
@@ -293,7 +384,7 @@ func main() {
 
 	query := strings.Join(flag.Args(), " ")
 
-	if strings.ToLower(*engineFlag) != "hn" && query == "" {
+	if strings.ToLower(*engineFlag) != "hn" && strings.ToLower(*engineFlag) != "polymarket" && strings.ToLower(*engineFlag) != "rss" && query == "" {
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -327,9 +418,20 @@ func main() {
 			fmt.Println("All default Searx instances failed.")
 			return
 		}
+	case "polymarket":
+		searchEngine = &engine.PolymarketEngine{Category: *catFlag, ShowX: true}
+	case "rss":
+		searchEngine = &engine.RSSEngine{Feeds: cfg.RSSFeeds, FilterSource: *sourceFlag}
 	default:
 		fmt.Printf("Unknown engine: %s\n", *engineFlag)
 		os.Exit(1)
+	}
+
+	// Show spinner for all except polymarket (which handles its own for better messaging)
+	if strings.ToLower(*engineFlag) != "polymarket" {
+		s := ui.NewSpinner("Searching " + searchEngine.Name() + "...")
+		s.Start()
+		defer s.Stop()
 	}
 
 	results, err := searchEngine.Search(query)
@@ -337,7 +439,7 @@ func main() {
 		primary := strings.ToLower(*engineFlag)
 		if shouldFallback(primary, err) {
 			for _, fallbackName := range fallbackEngineNames(primary) {
-				fallbackEngine, ok := buildEngine(fallbackName, "", *hnCatFlag)
+				fallbackEngine, ok := buildEngine(fallbackName, "", *hnCatFlag, *catFlag, cfg.RSSFeeds, *sourceFlag)
 				if !ok {
 					continue
 				}
@@ -354,7 +456,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	ui.PrintResults(searchEngine.Name(), query, results)
+	qDisplay := query
+	if qDisplay == "" {
+		if strings.ToLower(*engineFlag) == "polymarket" {
+			if *catFlag != "" {
+				qDisplay = strings.Title(*catFlag)
+			} else {
+				qDisplay = "Breaking"
+			}
+		} else if strings.ToLower(*engineFlag) == "rss" {
+			if *sourceFlag != "" {
+				qDisplay = "Feed (" + *sourceFlag + ")"
+			} else {
+				qDisplay = "All Feeds"
+			}
+		} else {
+			qDisplay = "Search"
+		}
+	}
+	ui.PrintResults(searchEngine.Name(), qDisplay, results)
 }
 
 func sanitizeFilename(s string) string {
