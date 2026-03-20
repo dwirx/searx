@@ -9,6 +9,7 @@ A powerful, modular, and distraction-free CLI tool written in Go. Search across 
 - **🔍 Multi-Engine Search**: Support for DuckDuckGo, Mojeek, Google, Brave, and SearX.
 - **📊 Real-time Markets**: Integration with **Polymarket** featuring color-coded price movements (↑/↓) and categorical filtering.
 - **📰 RSS Reader**: Full-featured RSS/Atom manager with global search, source filtering, and automated feed validation.
+- **⚖️ Hukum Indonesia**: Integration with **Pasal.id** for full-text search across Indonesian laws and regulations.
 - **📖 Smart Reader Mode**: Automatically extracts clean, Markdown-like article content for a distraction-free reading experience.
 - **🛡️ Auto-Bypass**: Intelligent fallbacks using [Lightpanda](https://lightpanda.io/) (Headless Browser) and Archive.today to bypass paywalls (NYT, WSJ, Bloomberg, etc.).
 - **💾 Save to Markdown**: Save any extracted article directly to a `.md` file for your personal knowledge base.
@@ -51,7 +52,14 @@ search -market -cat politics         # Filter by Politics
 ```
 *Supported categories: `trending`, `breaking`, `new`, `politics`, `crypto`, `sports`, `finance`, `geopolitics`, `tech`, `culture`, `weather`.*
 
-### 3. 📰 RSS Feed Manager
+### 3. ⚖️ Hukum Indonesia (Pasal.id)
+Cari pasal atau undang-undang dengan mudah.
+```bash
+search -pasal "upah minimum"         # Cari tentang upah minimum
+search -pasal "hak cipta"            # Cari tentang hak cipta
+```
+
+### 4. 📰 RSS Feed Manager
 Stay updated with your favorite news sources.
 ```bash
 search -rss                          # Read all subscribed feeds
@@ -68,7 +76,7 @@ search check-rss                                         # Validate and cleanup 
 ```
 *Configuration stored at: `~/.local/share/searx/rss.yaml`*
 
-### 4. 📖 Reader Mode (Bypass Paywalls)
+### 5. 📖 Reader Mode (Bypass Paywalls)
 ```bash
 search -read "https://www.nytimes.com/..."        # Extract and read
 search -read "https://go.dev/blog/..." -save      # Read and save to .md

@@ -24,16 +24,21 @@ search -market
 ```bash
 search -market -cat crypto
 search -market -cat politics
-search -market -cat sports
 ```
 Supported categories: `trending`, `breaking`, `new`, `politics`, `crypto`, `sports`, `finance`, `geopolitics`, `tech`, `culture`, `weather`.
 
+## ⚖️ Hukum Indonesia (Pasal.id)
+Cari pasal atau undang-undang RI.
+
+**Contoh:**
+```bash
+search -pasal "upah minimum"
+search -pasal -law-type UU "cipta kerja"
+```
+Lihat [docs/PASAL.md](PASAL.md) untuk panduan lengkap.
+
 ## 📰 RSS Feeds
 Manage and read your favorite news feeds directly from the CLI.
-
-**Configuration File:**
-Your feeds are stored in YAML format at:
-`~/.local/share/searx/rss.yaml`
 
 **Read all feeds:**
 ```bash
@@ -45,10 +50,15 @@ search -rss
 search -rss "technology"
 ```
 
+**Filter by source:**
+```bash
+search -rss -source bloomberg
+```
+
 **Manage feeds:**
 ```bash
-search -add-rss techcrunch=https://techcrunch.com/feed/
-search -del-rss bbc
+search -add-rss name=url
+search -del-rss name
 search list-rss
 search check-rss
 ```
@@ -66,12 +76,9 @@ search -read "https://example.com/article"
 search -read "https://example.com/article" -save
 ```
 
-**Force paywall bypass (Archive.today):**
-```bash
-search -read "https://nytimes.com/..." -archive
-```
-
 ## 🛠 Commands
 - `search setup`: Install Lightpanda browser (Linux).
+- `search check-rss`: Validate and cleanup broken feeds.
+- `search list-rss`: List all subscriptions.
 - `search update`: Update Search CLI and Lightpanda.
 - `search version`: Show versions.

@@ -37,8 +37,9 @@ go run ./cmd/search/main.go "your search query"
 
 ### Key Commands
 - `search <query>`: Search using the default engine (DuckDuckGo).
-- `search -e <engine> <query>`: Search using a specific engine (e.g., `mojeek`, `google`, `hn`, `polymarket`).
+- `search -e <engine> <query>`: Search using a specific engine (e.g., `mojeek`, `google`, `hn`, `polymarket`, `pasal`).
 - `search -market [-cat <topic>]`: Shortcut for Polymarket markets with real-time price tracking and color coding.
+- `search -pasal <query>`: Shortcut for Indonesian Laws search (pasal.id).
 - `search -rss [-source <name>] [<query>]`: Read and search through subscribed RSS feeds.
     - Specific Source: Use `-source bloomberg` to only read a specific feed.
     - Configuration: `~/.local/share/searx/rss.yaml`

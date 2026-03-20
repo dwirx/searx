@@ -2,6 +2,7 @@ package reader
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os/exec"
@@ -18,6 +19,11 @@ type Article struct {
 }
 
 func SmartRead(urlStr string) (*Article, error) {
+	// Specialized handling for Pasal.id (uses their official API for better structure)
+	if strings.Contains(urlStr, "pasal.id/akn/id/act/") {
+		return fetchPasalContent(urlStr)
+	}
+
 	fmt.Printf("Attempting standard fetch: %s...\n", urlStr)
 	article, err := ReadURL(urlStr)
 
@@ -211,4 +217,86 @@ func ReadURLWithLightpanda(urlStr string) (*Article, error) {
 
 	isArchive := strings.Contains(urlStr, "archive")
 	return extractContent(doc, isArchive)
+}
+
+// fetchPasalContent fetches full law details from pasal.id API
+func fetchPasalContent(urlStr string) (*Article, error) {
+	// Extract FRBR URI from URL
+	// URL example: https://pasal.id/akn/id/act/uu/2020/11#pasal-1
+	parts := strings.Split(urlStr, "pasal.id")
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("invalid pasal.id URL")
+	}
+	uri := strings.Split(parts[1], "#")[0]
+	apiURL := "https://pasal.id/api/v1/laws" + uri
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(apiURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("pasal.id API error: %d", resp.StatusCode)
+	}
+
+	var data struct {
+		Work struct {
+			Title  string `json:"title"`
+			Number string `json:"number"`
+			Year   int    `json:"year"`
+			Status string `json:"status"`
+		} `json:"work"`
+		Articles []struct {
+			Type   string `json:"type"` // bab, pasal
+			Number string `json:"number"`
+			Title  string `json:"title"`
+			Body   string `json:"body"`
+		} `json:"articles"`
+		Relationships []struct {
+			Type        string `json:"type"`
+			RelatedWork struct {
+				Title  string `json:"title"`
+				Number string `json:"number"`
+				Year   int    `json:"year"`
+				Status string `json:"status"`
+			} `json:"related_work"`
+		} `json:"relationships"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, err
+	}
+
+	title := fmt.Sprintf("%s (No. %s Th %d)", data.Work.Title, data.Work.Number, data.Work.Year)
+	var content strings.Builder
+
+	content.WriteString(fmt.Sprintf("STATUS: %s\n", strings.ToUpper(data.Work.Status)))
+
+	if len(data.Relationships) > 0 {
+		content.WriteString("\nRELASI HUKUM:\n")
+		for _, rel := range data.Relationships {
+			content.WriteString(fmt.Sprintf("- %s: %s No. %s Th %d [%s]\n", 
+				rel.Type, rel.RelatedWork.Title, rel.RelatedWork.Number, rel.RelatedWork.Year, strings.ToUpper(rel.RelatedWork.Status)))
+		}
+		content.WriteString("\n" + strings.Repeat("-", 40) + "\n")
+	}
+
+	for _, art := range data.Articles {
+		if art.Type == "bab" {
+			content.WriteString(fmt.Sprintf("\n## BAB %s: %s\n\n", art.Number, art.Title))
+		} else if art.Type == "pasal" {
+			content.WriteString(fmt.Sprintf("### Pasal %s\n", art.Number))
+			if art.Title != "" {
+				content.WriteString(fmt.Sprintf("*%s*\n\n", art.Title))
+			}
+			content.WriteString(fmt.Sprintf("%s\n\n", art.Body))
+		}
+	}
+
+	return &Article{
+		Title:   title,
+		Content: content.String(),
+	}, nil
 }

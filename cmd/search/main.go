@@ -54,7 +54,7 @@ func fallbackEngineNames(primary string) []string {
 	}
 }
 
-func buildEngine(name, searxInstance, hnCategory, polyCat string, rssFeeds map[string]string, rssSource string) (engine.SearchEngine, bool) {
+func buildEngine(name, searxInstance, hnCategory, polyCat string, rssFeeds map[string]string, rssSource string, lawType string) (engine.SearchEngine, bool) {
 	switch strings.ToLower(name) {
 	case "google":
 		return &engine.GoogleEngine{}, true
@@ -72,6 +72,8 @@ func buildEngine(name, searxInstance, hnCategory, polyCat string, rssFeeds map[s
 		return &engine.PolymarketEngine{Category: polyCat, ShowX: true}, true
 	case "rss":
 		return &engine.RSSEngine{Feeds: rssFeeds, FilterSource: rssSource}, true
+	case "pasal":
+		return &engine.PasalEngine{LawType: lawType}, true
 	default:
 		return nil, false
 	}
@@ -161,8 +163,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  version       Show Search CLI and Lightpanda versions\n")
 		fmt.Fprintf(os.Stderr, "  --version     Show Search CLI version only\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
-		fmt.Fprintf(os.Stderr, "  -e <engine>   Search engine: ddg, google, brave, mojeek, hn, searx, polymarket\n")
+		fmt.Fprintf(os.Stderr, "  -e <engine>   Search engine: ddg, google, brave, mojeek, hn, searx, polymarket, rss, pasal\n")
 		fmt.Fprintf(os.Stderr, "  -market       Shortcut for Polymarket (use -cat for specific topic)\n")
+		fmt.Fprintf(os.Stderr, "  -pasal        Shortcut for Indonesian Laws (pasal.id)\n")
 		fmt.Fprintf(os.Stderr, "  -cat <topic>  Polymarket Category: trending, breaking, new, politics, crypto, sports, etc.\n")
 		fmt.Fprintf(os.Stderr, "  -rss          Read subscribed RSS feeds (use -source for specific feed)\n")
 		fmt.Fprintf(os.Stderr, "  -source <name> Specific RSS source: bloomberg, cnn, bbc, theverge, wired, etc.\n")
@@ -190,6 +193,8 @@ func main() {
 	sourceFlag := flag.String("source", "", "Specific RSS source name to read (e.g. bloomberg, cnn)")
 	addRSSFlag := flag.String("add-rss", "", "Add a new RSS feed (format: name=url)")
 	delRSSFlag := flag.String("del-rss", "", "Remove an RSS feed by name")
+	pasalFlag := flag.Bool("pasal", false, "Search Indonesian laws (pasal.id)")
+	lawTypeFlag := flag.String("law-type", "", "Filter Indonesian laws by type (UU, PP, PERPRES, etc.)")
 	readURL := flag.String("read", "", "URL to read article content from")
 	archiveFlag := flag.Bool("archive", false, "Use archive.today to read the URL (for paywalls)")
 	pandaFlag := flag.Bool("panda", false, "Use lightpanda headless browser for reading")
@@ -234,6 +239,10 @@ func main() {
 
 	if *marketFlag {
 		*engineFlag = "polymarket"
+	}
+
+	if *pasalFlag {
+		*engineFlag = "pasal"
 	}
 
 	if *versionFlag {
@@ -384,7 +393,7 @@ func main() {
 
 	query := strings.Join(flag.Args(), " ")
 
-	if strings.ToLower(*engineFlag) != "hn" && strings.ToLower(*engineFlag) != "polymarket" && strings.ToLower(*engineFlag) != "rss" && query == "" {
+	if strings.ToLower(*engineFlag) != "hn" && strings.ToLower(*engineFlag) != "polymarket" && strings.ToLower(*engineFlag) != "rss" && strings.ToLower(*engineFlag) != "pasal" && query == "" {
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -422,6 +431,8 @@ func main() {
 		searchEngine = &engine.PolymarketEngine{Category: *catFlag, ShowX: true}
 	case "rss":
 		searchEngine = &engine.RSSEngine{Feeds: cfg.RSSFeeds, FilterSource: *sourceFlag}
+	case "pasal":
+		searchEngine = &engine.PasalEngine{LawType: *lawTypeFlag}
 	default:
 		fmt.Printf("Unknown engine: %s\n", *engineFlag)
 		os.Exit(1)
@@ -439,7 +450,7 @@ func main() {
 		primary := strings.ToLower(*engineFlag)
 		if shouldFallback(primary, err) {
 			for _, fallbackName := range fallbackEngineNames(primary) {
-				fallbackEngine, ok := buildEngine(fallbackName, "", *hnCatFlag, *catFlag, cfg.RSSFeeds, *sourceFlag)
+				fallbackEngine, ok := buildEngine(fallbackName, "", *hnCatFlag, *catFlag, cfg.RSSFeeds, *sourceFlag, *lawTypeFlag)
 				if !ok {
 					continue
 				}
@@ -469,6 +480,12 @@ func main() {
 				qDisplay = "Feed (" + *sourceFlag + ")"
 			} else {
 				qDisplay = "All Feeds"
+			}
+		} else if strings.ToLower(*engineFlag) == "pasal" {
+			if *lawTypeFlag != "" {
+				qDisplay = "Hukum (" + strings.ToUpper(*lawTypeFlag) + ")"
+			} else {
+				qDisplay = "Semua Hukum"
 			}
 		} else {
 			qDisplay = "Search"

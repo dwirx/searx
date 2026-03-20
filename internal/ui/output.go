@@ -15,6 +15,7 @@ const (
 	colorBlue   = "\033[34m"
 	colorMagenta = "\033[35m"
 	colorCyan    = "\033[36m"
+	colorWhite   = "\033[37m"
 	colorBold   = "\033[1m"
 )
 
@@ -60,6 +61,10 @@ func PrintResults(engineName string, query string, results []types.Result) {
 	}
 	if strings.Contains(strings.ToLower(engineName), "rss") {
 		PrintRSSResults(engineName, query, results)
+		return
+	}
+	if strings.Contains(strings.ToLower(engineName), "pasal") {
+		PrintPasalResults(engineName, query, results)
 		return
 	}
 
@@ -152,12 +157,81 @@ func PrintRSSResults(engineName string, query string, results []types.Result) {
 		fmt.Printf("%s%d.%s %s\n", colorBold, i+1, colorReset, title)
 		
 		if res.Snippet != "" {
-			// Clean up any remaining junk and indent
 			snippet := strings.TrimSpace(res.Snippet)
 			if len(snippet) > 250 {
 				snippet = snippet[:247] + "..."
 			}
 			fmt.Printf("   %s\n", snippet)
+		}
+		fmt.Printf("   %s🔗 %s%s\n\n", colorCyan, res.URL, colorReset)
+	}
+}
+
+func PrintPasalResults(engineName string, query string, results []types.Result) {
+	fmt.Printf("\n%s🏛️  RI Law Search: %s %s (via %s)\n", colorBold, query, colorReset, engineName)
+	fmt.Println(strings.Repeat("━", 60))
+	
+	if len(results) == 0 {
+		fmt.Println("Tidak ada pasal atau undang-undang yang ditemukan.")
+		return
+	}
+
+	for i, res := range results {
+		title := res.Title
+		snippet := strings.TrimSpace(res.Snippet)
+		
+		// Extract Status from snippet prefix
+		statusColor := colorWhite
+		statusText := "BERLAKU"
+		if strings.HasPrefix(snippet, "[STATUS:") {
+			endIdx := strings.Index(snippet, "]")
+			if endIdx != -1 {
+				statusText = snippet[8:endIdx]
+				snippet = strings.TrimSpace(snippet[endIdx+1:])
+				switch statusText {
+				case "BERLAKU":
+					statusColor = colorGreen
+				case "DICABUT":
+					statusColor = colorRed
+				case "DIUBAH":
+					statusColor = colorYellow
+				}
+			}
+		}
+
+		// Color the type tag [UU], [PP], etc.
+		if strings.HasPrefix(title, "Pasal") {
+			parts := strings.SplitN(title, "|", 2)
+			if len(parts) == 2 {
+				pasalPart := strings.TrimSpace(parts[0])
+				titlePart := strings.TrimSpace(parts[1])
+				if strings.HasPrefix(titlePart, "[") {
+					idx := strings.Index(titlePart, "]")
+					tag := titlePart[:idx+1]
+					rest := titlePart[idx+1:]
+					title = fmt.Sprintf("%s%s%s %s%s%s %s", colorGreen, pasalPart, colorReset, colorMagenta, tag, colorReset, colorBold+rest+colorReset)
+				} else {
+					title = fmt.Sprintf("%s%s%s | %s", colorGreen, pasalPart, colorReset, colorBold+titlePart+colorReset)
+				}
+			}
+		} else if strings.HasPrefix(title, "[") {
+			idx := strings.Index(title, "]")
+			tag := title[:idx+1]
+			rest := title[idx+1:]
+			title = fmt.Sprintf("%s%s%s %s", colorMagenta, tag, colorReset, colorBold+rest+colorReset)
+		}
+
+		fmt.Printf("%s%d.%s %s\n", colorBold, i+1, colorReset, title)
+		fmt.Printf("   Status: %s%s%s\n", statusColor, statusText, colorReset)
+		
+		if snippet != "" {
+			lines := strings.Split(snippet, "\n")
+			for _, line := range lines {
+				if len(line) > 120 {
+					line = line[:117] + "..."
+				}
+				fmt.Printf("   %s%s%s\n", colorWhite, line, colorReset)
+			}
 		}
 		fmt.Printf("   %s🔗 %s%s\n\n", colorCyan, res.URL, colorReset)
 	}
