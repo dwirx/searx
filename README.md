@@ -6,7 +6,7 @@ A powerful, modular, and distraction-free CLI tool written in Go. Search across 
 
 ## ✨ Features
 
-- **🔍 Multi-Engine Search**: Support for DuckDuckGo, Mojeek, Google, Brave, and SearX.
+- **🔍 Multi-Engine Search**: Support for DuckDuckGo, Mojeek, Google, Brave, You.com, and SearX.
 - **📊 Real-time Markets**: Integration with **Polymarket** featuring color-coded price movements (↑/↓) and categorical filtering.
 - **📰 RSS Reader**: Full-featured RSS/Atom manager with global search, source filtering, and automated feed validation.
 - **⚖️ Hukum Indonesia**: Integration with **Pasal.id** for full-text search across Indonesian laws and regulations.
@@ -39,11 +39,21 @@ go build -o search ./cmd/search
 ### 1. 🔍 Searching the Web
 ```bash
 search "golang concurrency patterns"          # Default (DuckDuckGo)
+search -you "latest space news"               # Use You.com Search
+search -you -you-mode research "why go?"      # You.com Research (Agentic)
+search -you -you-mode contents "https://go.dev" # You.com Contents (Scraper)
 search -e google "latest space news"          # Use Google
 search -e mojeek "privacy tools"              # Use Mojeek (fast & independent)
 ```
 
-### 2. 📊 Polymarket (Prediction Markets)
+### 2. 🔍 Advanced AI-Search (Exa & Firecrawl)
+High-precision neural search and web scraping for developers.
+```bash
+search -exa "best AI models" -exa-cat news    # Exa Neural Search
+search -fire "golang tutorials" -fire-limit 5 # Firecrawl Scraping
+```
+
+### 3. 📊 Polymarket (Prediction Markets)
 Track what the world thinks is going to happen in real-time.
 ```bash
 search -market                       # View trending breaking news
@@ -90,11 +100,16 @@ search -read "https://go.dev/blog/..." -save      # Read and save to .md
 
 | Flag | Description |
 |------|-------------|
-| `-e <name>` | Select search engine (`ddg`, `google`, `brave`, `mojeek`, `hn`, `searx`, `polymarket`, `rss`) |
+| `-e <name>` | Select search engine (`ddg`, `google`, `brave`, `mojeek`, `hn`, `searx`, `polymarket`, `rss`, `exa`, `fire`, `you`) |
 | `-market` | Shortcut for Polymarket markets |
 | `-cat <topic>` | Category for Polymarket (politics, crypto, etc.) |
 | `-rss` | Read subscribed RSS feeds |
 | `-source <name>` | Filter RSS results by source name |
+| `-exa` | Shortcut for Exa Neural Search |
+| `-fire` | Shortcut for Firecrawl Search |
+| `-you` | Shortcut for You.com Search |
+| `-you-mode <m>` | You.com Mode (`search`, `research`, `contents`) |
+| `-pasal` | Shortcut for Indonesian Laws |
 | `-read <url>` | Extract and read article content |
 | `-save` | Save the extracted content to a `.md` file |
 | `-panda` | Force use of Lightpanda headless browser |

@@ -87,6 +87,8 @@ func buildEngine(name, searxInstance, hnCategory, polyCat string, rssFeeds map[s
 		return &engine.ExaEngine{}, true
 	case "fire":
 		return &engine.FirecrawlEngine{}, true
+	case "you":
+		return &engine.YouEngine{}, true
 	default:
 		return nil, false
 	}
@@ -177,10 +179,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  version       Show Search CLI and Lightpanda versions\n")
 		fmt.Fprintf(os.Stderr, "  --version     Show Search CLI version only\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
-		fmt.Fprintf(os.Stderr, "  -e <engine>   Search engine: ddg, google, brave, mojeek, hn, searx, polymarket, rss, pasal, exa, fire\n")
+		fmt.Fprintf(os.Stderr, "  -e <engine>   Search engine: ddg, google, brave, mojeek, hn, searx, polymarket, rss, pasal, exa, fire, you\n")
 		fmt.Fprintf(os.Stderr, "  -market       Shortcut for Polymarket (use -cat for specific topic)\n")
 		fmt.Fprintf(os.Stderr, "  -exa          Shortcut for Exa Neural Search\n")
 		fmt.Fprintf(os.Stderr, "  -fire         Shortcut for Firecrawl Search\n")
+		fmt.Fprintf(os.Stderr, "  -you          Shortcut for You.com Search\n")
+		fmt.Fprintf(os.Stderr, "  -you-mode <m> You.com mode: search, research, contents (default: search)\n")
 		fmt.Fprintf(os.Stderr, "  -pasal        Shortcut for Indonesian Laws (pasal.id)\n")
 		fmt.Fprintf(os.Stderr, "  -law-type <t> Filter Laws by type (UU, PP, PERPRES, etc.)\n")
 		fmt.Fprintf(os.Stderr, "  -law-year <y> Filter Laws by year (e.g. 2024)\n")
@@ -219,6 +223,7 @@ func main() {
 	marketFlag := flag.Bool("market", false, "Polymarket shortcut")
 	exaFlag := flag.Bool("exa", false, "Exa shortcut")
 	fireFlag := flag.Bool("fire", false, "Firecrawl shortcut")
+	youFlag := flag.Bool("you", false, "You.com shortcut")
 	catFlag := flag.String("cat", "", "Category for Polymarket (politics, crypto, sports, etc.)")
 	rssFlag := flag.Bool("rss", false, "Read subscribed RSS feeds")
 	sourceFlag := flag.String("source", "", "Specific RSS source name to read (e.g. bloomberg, cnn)")
@@ -240,6 +245,10 @@ func main() {
 	fireLocFlag := flag.String("fire-loc", "", "Firecrawl location (e.g. 'Germany')")
 	fireTbsFlag := flag.String("fire-tbs", "", "Firecrawl time-based search (e.g. qdr:d)")
 	fireScrapeFlag := flag.Bool("fire-scrape", false, "Enable full page scraping (markdown)")
+	youCountFlag := flag.Int("you-count", 10, "You.com results count (1-100)")
+	youCountryFlag := flag.String("you-country", "", "You.com country filter")
+	youLangFlag := flag.String("you-lang", "en", "You.com language filter")
+	youModeFlag := flag.String("you-mode", "search", "You.com mode: search, research, contents")
 	readURL := flag.String("read", "", "URL to read article content from")
 	archiveFlag := flag.Bool("archive", false, "Use archive.today to read the URL (for paywalls)")
 	pandaFlag := flag.Bool("panda", false, "Use lightpanda headless browser for reading")
@@ -294,6 +303,10 @@ func main() {
 
 	if *fireFlag {
 		*engineFlag = "fire"
+	}
+
+	if *youFlag {
+		*engineFlag = "you"
 	}
 
 	if *pasalFlag {
@@ -521,6 +534,13 @@ func main() {
 			Location:      *fireLocFlag,
 			Tbs:           *fireTbsFlag,
 			ScrapeFormats: scrapeFormats,
+		}
+	case "you":
+		searchEngine = &engine.YouEngine{
+			Count:    *youCountFlag,
+			Country:  *youCountryFlag,
+			Language: *youLangFlag,
+			Mode:     *youModeFlag,
 		}
 	default:
 		fmt.Printf("Unknown engine: %s\n", *engineFlag)
